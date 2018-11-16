@@ -8,13 +8,15 @@
 
 import os
 import urllib.request
+import shutil
+from contextlib import closing
 from ftplib import FTP
 
 
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
 rawDataDir = thisDir + "/rawData/"
-dwdFtpServer = "ftp://ftp-cdc.dwd.de/"
+dwdFtpServer = "ftp-cdc.dwd.de"
 radolanPath = "pub/CDC/grids_germany/hourly/radolan/recent/asc/"
 dwdODServer = "https://opendata.dwd.de/"
 cosmoD2Path = "weather/nwp/cosmo-d2/grib/"
@@ -32,12 +34,11 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
             fileHandle.write(data)
 
 
-def ftpDownloadFile(serverName, path, fileName, targetDir):
+def ftpDownloadFile(serverName, path, fileName, targetDir, userName=None, password=None):
     fullFile = targetDir + fileName
     print("Now attempting connection to {}".format(serverName))
-    with FTP(serverName) as ftp:
+    with FTP(serverName, user=userName, passwd=password) as ftp:
         with open(fullFile, 'wb') as fileHandle:
-            ftp.login()
             ftp.cwd(path)
             print("Now saving data in {}".format(fullFile))
             tfp.retrbinary(fileName, fileHandle.write)
