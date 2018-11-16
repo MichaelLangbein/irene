@@ -28,7 +28,7 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
     fullFile = targetDir + fileName
     print("Now attempting connection to {}".format(fullUrl))
     with urllib.request.urlopen(fullUrl) as response:
-        with open(fullFile, 'wb') as fileHandle:
+        with open(fullFile, "wb") as fileHandle:
             print("Now saving data in {}".format(fullFile))
             data = response.read()  # a bytes-object
             fileHandle.write(data)
@@ -38,7 +38,7 @@ def ftpDownloadFile(serverName, path, fileName, targetDir, userName=None, passwo
     fullFile = targetDir + fileName
     print("Now attempting connection to {}".format(serverName))
     with FTP(serverName, user=userName, passwd=password) as ftp:
-        with open(fullFile, 'wb') as fileHandle:
+        with open(fullFile, "wb") as fileHandle:
             ftp.cwd(path)
             print("Now saving data in {}".format(fullFile))
             tfp.retrbinary(fileName, fileHandle.write)
