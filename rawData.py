@@ -22,6 +22,7 @@ cosmoD2Path = "weather/nwp/cosmo-d2/grib/"
 
 
 
+
 def httpDownloadFile(serverName, path, fileName, targetDir):
     """ 
     >>> httpDownloadFile(dwdODServer, cosmoD2Path + "00/clc/", "cosmo-d2_germany_regular-lat-lon_model-level_2018111600_001_52_CLC.grib2.bz2", rawDataDir) 
@@ -34,6 +35,7 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
             print("Now saving data in {}".format(fullFile))
             data = response.read()  # a bytes-object
             fileHandle.write(data)
+
 
 
 def ftpDownloadFile(serverName, path, fileName, targetDir):
@@ -51,14 +53,17 @@ def ftpDownloadFile(serverName, path, fileName, targetDir):
             ftp.retrbinary("RETR " + fileName, fileHandle.write)
         
 
+
 def getRadarFileName(date: dt.datetime):
     fileName = "RW-{}.tar.gz".format(date.strftime("%Y%m%d"))
     return fileName
 
 
+
 def downloadRadar(date: dt.datetime):
     fileName = getRadarFileName(date)
     ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+
 
 
 def getModelFileName(date: dt.datetime, parameter: str, nr1: int, nr2: int):
@@ -68,6 +73,7 @@ def getModelFileName(date: dt.datetime, parameter: str, nr1: int, nr2: int):
     nr2Padded = str(nr2).zfill(2)
     fileName = "cosmo-d2_germany_regular-lat-lon_model-level_{}_{}_{}_{}.grib2.bz2".format(timeString, nr1Padded, nr2Padded, paraCap)
     return fileName
+
 
 
 def downloadModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
@@ -84,25 +90,38 @@ def downloadModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
     httpDownloadFile(dwdODServer, fullPath, fileName, rawDataDir) 
 
 
+
+def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
+    out = []
+    currentTime = fromTime
+    while currentTime <= toTime:
+        out.append(currentTime)
+        currentTime += dt.timedelta(hours=deltaHours)
+    return out
+
+
 def getModelData(fromTime, toTime, bbox, parameters):
     data = []
-    timeSteps = []
+    timeSteps = getTimeSteps(fromTime, toTime, 3)
     for parameter in parameters:
         for time in timeSteps:
             fileName = getModelFileName(time, parameter, 1, 1)
-            #if not fileExist(fileName):
-            #    downloadModel(time, parameter, 1, 1)
+            fullFileName = rawDataDir + fileName
+            if not os.path.isfile(fullFileName):
+                downloadModel(time, parameter, 1, 1)
             #data[parameter][time] = extractModelData(file)
     return data
 
 
+
 def getRadarData(fromTime, toTime, bbox):
     data = []
-    timeSteps = []
+    timeSteps = getTimeSteps(fromTime, toTime, 3)
     for time in timeSteps:
         fileName = getRadarFileName(time)
-        #if not fileExists(fileName):
-        #    downloadRadar(time)
+        fullFileName = rawDataDir + fileName
+        if not os.path.isfile(fullFileName):
+            downloadRadar(time)
         #data[time] = extractRadarData(fileName)
 
 
