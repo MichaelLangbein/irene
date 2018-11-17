@@ -1,15 +1,19 @@
-# Raw data is downloaded and stored in rawData directory.
-# From there, data is red and interpreted into numpy-arrays, which are stored in npyData directory.
-# From there, data is fed into the model.
+# Raw data is downloaded and stored in rawData directory : download*Data()
+# From there, data is red and interpreted into numpy-arrays, which are stored in npyData directory: extract*Data()
+# From there, data is fed into the model: get*Data()
 
 
 # Aktuelle Daten (Radar nur binär): https://opendata.dwd.de/weather/nwp/
 # Historische Daten (aber keine Modellvorhersagen): ftp://ftp-cdc.dwd.de/pub/CDC/
 
 import os
+import bz2
+import tarfile
 import datetime as dt
 import urllib.request
 from ftplib import FTP
+import pygrib as pg
+import numpy as np
 
 
 
@@ -20,6 +24,22 @@ radolanPath = "pub/CDC/grids_germany/hourly/radolan/recent/asc/"
 dwdODServer = "https://opendata.dwd.de/"
 cosmoD2Path = "weather/nwp/cosmo-d2/grib/"
 
+
+
+def extract(path, fileName):
+    fullName = path + fileName
+    if (fullName.endswith("tar.gz")):
+        with tarfile.open(fullName, "r:gz") as tar:
+            tar.extractall(path)
+    elif (fullName.endswith("tar")):
+        with tarfile.open(fullName, "r:") as tar:
+            tar.extractall(path)
+    elif(fullName.endswith(".bz2")):
+        extractedName = fullName[:-4]
+        with bz2.BZ2File(fullName) as zipFile: # open the file
+            with open(extractedName, "wb") as file:
+                data = zipFile.read() # get the decompressed data
+                file.write(data)
 
 
 
@@ -60,10 +80,9 @@ def getRadarFileName(date: dt.datetime):
 
 
 
-def downloadRadar(date: dt.datetime):
-    fileName = getRadarFileName(date)
-    ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
-
+def getRadarFileNameUnzipped(date: dt.datetime):
+    fileName = "RW_{}-{}.asc".format(date.strftime("%Y%m%d"), date.strftime("%H%M"))
+    return fileName
 
 
 def getModelFileName(date: dt.datetime, parameter: str, nr1: int, nr2: int):
@@ -76,18 +95,75 @@ def getModelFileName(date: dt.datetime, parameter: str, nr1: int, nr2: int):
 
 
 
-def downloadModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
+def getModelFileNameUnzipped(date, parameter, nr1, nr2):
+    fileNameZipped = getModelFileName(date, parameter, nr1, nr2)
+    return fileNameZipped[:-4]
+
+
+
+def downloadUnzipRadar(date: dt.datetime):
     """
-    >>> downloadModel(dt.datetime(2018, 11, 16), "clc", 1, 52)
+    >>> downloadUnzipRadar(dt.datetime(2018,10,14))
+    """
+    fileName = getRadarFileName(date)
+    ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+    extract(rawDataDir, fileName)
+
+
+
+def downloadUnzipModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
+    """
+    >>> downloadUnzipModel(dt.datetime(2018, 11, 16), "clc", 1, 52)
     """
     # todo: finde heraus, wofür nr1 und nr2 stehen
-    # todo: assert taht date is today (openData only has todays data)
+    # todo: assert that date is today (openData only has todays data)
     # todo: assert that date in [0, 3, 6, ...]
     # todo: assert that parameter in [...]
     hourString = date.strftime("%H")
     fullPath = "{}/{}/{}/".format(cosmoD2Path, hourString, parameter)
     fileName = getModelFileName(date, parameter, nr1, nr2)
     httpDownloadFile(dwdODServer, fullPath, fileName, rawDataDir) 
+    extract(rawDataDir, fileName)
+
+
+
+def radarDataToNpy(date: dt.datetime):
+    """ reads out already donwloaded and extracted ascii file into numpy array """
+    fullFileName = rawDataDir + getRadarFileNameUnzipped(date)
+    with open(fullFileName, "r") as f:
+        metaData = {}  
+        for nr, line in enumerate(f):
+            lineData = line.split()
+            if nr == 0: 
+                metaData["ncols"] = lineData[1]
+            elif nr == 1:
+                metaData["nrows"] = lineData[1]
+            elif nr == 2:
+                metaData["xllcorner"] = lineData[1]
+            elif nr == 3:
+                metaData["yllcorner"] = lineData[1]
+            elif nr == 4:
+                metaData["cellsize"] = lineData[1]
+            elif nr == 5:
+                metaData["NODATA_value"] = lineData[1]
+                print("Read this metadata from file:")
+                print(metaData)
+                data = np.zeros([int(metaData["nrows"]), int(metaData["ncols"])])
+            else:
+                row = nr - 6
+                for col, el in enumerate(lineData):
+                    #if el == metaData["NODATA_value"]:
+                    #    data[row, col] = None
+                    #else:
+                        data[row, col] = el
+    return data
+
+
+
+def modelDataToNpy(date: dt.datetime, parameter: str, nr1: int, nr2: int):
+    """ reads out already donwloaded and extracted grib2 data into numpy array """
+    pass
+
 
 
 
@@ -101,27 +177,27 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
 
 
 def getModelData(fromTime, toTime, bbox, parameters):
-    data = []
+    data = {}
     timeSteps = getTimeSteps(fromTime, toTime, 3)
     for parameter in parameters:
         for time in timeSteps:
-            fileName = getModelFileName(time, parameter, 1, 1)
+            fileName = getModelFileNameUnzipped(time, parameter, 1, 1)
             fullFileName = rawDataDir + fileName
             if not os.path.isfile(fullFileName):
-                downloadModel(time, parameter, 1, 1)
+                downloadUnzipModel(time, parameter, 1, 1)
             #data[parameter][time] = extractModelData(file)
     return data
 
 
 
-def getRadarData(fromTime, toTime, bbox):
-    data = []
+def getRadarData(fromTime, toTime, bbox = None):
+    data = {}
     timeSteps = getTimeSteps(fromTime, toTime, 3)
     for time in timeSteps:
-        fileName = getRadarFileName(time)
+        fileName = getRadarFileNameUnzipped(time)
         fullFileName = rawDataDir + fileName
         if not os.path.isfile(fullFileName):
-            downloadRadar(time)
-        #data[time] = extractRadarData(fileName)
-
+            downloadUnzipRadar(time)
+        data[time] = radarDataToNpy(fileName)
+    return data
 
