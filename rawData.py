@@ -131,6 +131,7 @@ def radarDataToNpy(date: dt.datetime):
     """ reads out already donwloaded and extracted ascii file into numpy array """
     fullFileName = rawDataDir + getRadarFileNameUnzipped(date)
     with open(fullFileName, "r") as f:
+        print("Reading data from {}".format(fullFileName))
         metaData = {}  
         for nr, line in enumerate(f):
             lineData = line.split()
@@ -191,13 +192,22 @@ def getModelData(fromTime, toTime, bbox, parameters):
 
 
 def getRadarData(fromTime, toTime, bbox = None):
+    """
+    >>> data = getRadarData(dt.datetime(2018, 10, 14, 0, 50), dt.datetime(2018, 10, 15, 0, 0))
+    >>> for time in data:
+    >>>     print(time)
+    >>>     print(np.max(data[time]))
+    """
     data = {}
     timeSteps = getTimeSteps(fromTime, toTime, 3)
     for time in timeSteps:
         fileName = getRadarFileNameUnzipped(time)
         fullFileName = rawDataDir + fileName
         if not os.path.isfile(fullFileName):
+            print("Could not find {} locally, trying to download file".format(fileName))
             downloadUnzipRadar(time)
-        data[time] = radarDataToNpy(fileName)
+        data[time] = radarDataToNpy(time)
     return data
+
+
 

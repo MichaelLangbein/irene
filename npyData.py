@@ -5,18 +5,25 @@ import datetime as dt
 import rawData as rd
 
 
-def getTimeSeries(timeFrom: dt.datetime, timeTo: dt.datetime):
-    series = rd.getRadarData(timeFrom, timeTo)
+def hasStorm(image):
+    return 0
+
+def hasRain(image):
+    return 0
 
 
 def analyseImage(image):
-    pass
+    labels = []
+    labels.append(hasStorm(image))
+    labels.append(hasRain(image))
+    return labels
 
 
-def getLabeledTimeseries(timeFrom, timeTo):
+def getLabeledTimeseries(fromTime, toTime):
     labeledSeries = {"data": [], "labels": []}
-    series = getTimeSeries(timeFrom, timeTo)
-    for t, image in enumerate(series): 
+    series = rd.getRadarData(fromTime, toTime)
+    for time in series:
+        image = series[time]
         labels = analyseImage(image)
         labeledSeries["data"].append(image)
         labeledSeries["labels"].append(labels)
