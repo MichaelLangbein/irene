@@ -50,3 +50,7 @@ def getLabeledTimeseries(fromTime, toTime):
         labeledSeries["data"].append(image)
         labeledSeries["labels"].append(labels)
     return labeledSeries
+
+
+data = getLabeledTimeseries(dt.datetime(2016, 10, 14), dt.datetime(2016, 10, 24))
+print(data["labels"])

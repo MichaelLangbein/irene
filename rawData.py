@@ -15,6 +15,7 @@ from ftplib import FTP
 import ftplib
 import pygrib as pg
 import numpy as np
+import time
 
 
 
@@ -60,7 +61,7 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
 
 
 
-def ftpDownloadFile(serverName, path, fileName, targetDir):
+def ftpDownloadFile(serverName, path, fileName, targetDir, attemptNr=1):
     """
     >>> ftpDownloadFile(dwdFtpServer, radolanPath, "RW-20180101.tar.gz", rawDataDir)
     """
@@ -73,11 +74,17 @@ def ftpDownloadFile(serverName, path, fileName, targetDir):
             ftp.cwd(path)
             print("Now saving data in {}".format(fullFile))
             ftp.retrbinary("RETR " + fileName, fileHandle.write)
-        
+
 
 
 def getRadarFileName(date: dt.datetime):
     fileName = "RW-{}.tar.gz".format(date.strftime("%Y%m%d"))
+    return fileName
+
+
+
+def getHistoricRadarFileName(date: dt.datetime):
+    fileName = "RW-{}.tar".format(date.strftime("%Y%m"))
     return fileName
 
 
@@ -107,17 +114,22 @@ def downloadUnzipRadar(date: dt.datetime):
     """
     >>> downloadUnzipRadar(dt.datetime(2018,10,14))
     """
-    fileName = getRadarFileName(date)
     try:
-        print("Searching for data in recent-data-dir:")
+        fileName = getRadarFileName(date)
+        print("Searching for file {} in recent-data-dir {}:".format(fileName, radolanPath))
         ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+        extract(rawDataDir, fileName)  
     except ftplib.error_perm:
-        print("Searching for data in historical-data-dir:")
+        fileName = getHistoricRadarFileName(date)
+        print("Searching for file {} in historical-data-dir {}:".format(fileName, radolanPathHistory))
         fullRadolanPathHistory = radolanPathHistory + date.strftime("%Y") + "/"
         ftpDownloadFile(dwdFtpServer, fullRadolanPathHistory, fileName, rawDataDir)
-    extract(rawDataDir, fileName)
+        extract(rawDataDir, fileName)
+        fileNameMonth = getRadarFileName(date)
+        print("Now extracting sub-archive {}".format(fileNameMonth))
+        extract(rawDataDir, fileNameMonth)
 
-downloadUnzipRadar(dt.datetime(2016,10,14))
+
 
 def downloadUnzipModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
     """
@@ -207,13 +219,22 @@ def getRadarData(fromTime, toTime, bbox = None):
     >>>     print(np.max(data[time]))
     """
     data = {}
+    fromTime = fromTime.replace(minute=50)
     timeSteps = getTimeSteps(fromTime, toTime, 3)
     for time in timeSteps:
+        print("Getting data for time {}".format(time))
         fileName = getRadarFileNameUnzipped(time)
         fullFileName = rawDataDir + fileName
-        if not os.path.isfile(fullFileName):
-            print("Could not find {} locally, trying to download file".format(fileName))
-            downloadUnzipRadar(time)
+        if os.path.isfile(fullFileName):
+            print("Found file {} locally".format(fullFileName))
+        else:
+            archiveFileName = getRadarFileName(time)
+            if os.path.isfile(archiveFileName):
+                print("Found file {} locally. Extracting now.".format(archiveFileName))
+                extract(rawDataDir, archiveFileName)
+            else:
+                print("Could not find {} locally, trying to download file".format(fileName))
+                downloadUnzipRadar(time)
         data[time] = radarDataToNpy(time)
     return data
 
