@@ -12,6 +12,7 @@ import tarfile
 import datetime as dt
 import urllib.request
 from ftplib import FTP
+import ftplib
 import pygrib as pg
 import numpy as np
 
@@ -21,6 +22,7 @@ thisDir = os.path.dirname(os.path.abspath(__file__))
 rawDataDir = thisDir + "/rawData/"
 dwdFtpServer = "ftp-cdc.dwd.de"
 radolanPath = "pub/CDC/grids_germany/hourly/radolan/recent/asc/"
+radolanPathHistory = "pub/CDC/grids_germany/hourly/radolan/historical/asc/"
 dwdODServer = "https://opendata.dwd.de/"
 cosmoD2Path = "weather/nwp/cosmo-d2/grib/"
 
@@ -106,10 +108,16 @@ def downloadUnzipRadar(date: dt.datetime):
     >>> downloadUnzipRadar(dt.datetime(2018,10,14))
     """
     fileName = getRadarFileName(date)
-    ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+    try:
+        print("Searching for data in recent-data-dir:")
+        ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+    except ftplib.error_perm:
+        print("Searching for data in historical-data-dir:")
+        fullRadolanPathHistory = radolanPathHistory + date.strftime("%Y") + "/"
+        ftpDownloadFile(dwdFtpServer, fullRadolanPathHistory, fileName, rawDataDir)
     extract(rawDataDir, fileName)
 
-
+downloadUnzipRadar(dt.datetime(2016,10,14))
 
 def downloadUnzipModel(date: dt.datetime, parameter: str, nr1: int, nr2: int):
     """

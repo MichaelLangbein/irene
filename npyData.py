@@ -1,21 +1,43 @@
-# Tries to get data from directory of presaved npy-arrays.
-# If data cannot be found there, calls rawData.getRadarData() to fetch the raw data.
+# Todos:
+#  - image labelling: also consinder history (6h)
+#  - storms: also consider wind and hail (is part of definition from dwd:
+#       "Gewitter mit Hagelschlag, heftigem Starkregen oder Orkan(artigen)Böen"
+#    )
 
 import datetime as dt
 import rawData as rd
+import numpy as np
 
 
-def hasStorm(image):
-    return 0
+def hatStarkregen(image):
+    """
+    Starkregen	
+    15 bis 25 l/m² in 1 Stunde
+    20 bis 35 l/m² in 6 Stunden
+    """
+    return np.max(image) > 150
 
-def hasRain(image):
-    return 0
+def hatHeftigerStarkregen(image):
+    """
+    > 25 l/m² in 1 Stunde
+    > 35 l/m² in 6 Stunden
+    """
+    return np.max(image) > 250
+
+
+def hatExtemerStarkregen(image):
+    """
+    > 40 l/m² in 1 Stunde
+    > 60 l/m² in 6 Stunden
+    """
+    return np.max(image) > 400
 
 
 def analyseImage(image):
     labels = []
-    labels.append(hasStorm(image))
-    labels.append(hasRain(image))
+    labels.append(hatStarkregen(image))
+    labels.append(hatHeftigerStarkregen(image))
+    labels.append(hatExtemerStarkregen(image))
     return labels
 
 
