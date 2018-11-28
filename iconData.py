@@ -1,3 +1,8 @@
+import datetime as dt
+from utils import ftpDownloadFile, httpDownloadFile, extract
+
+
+
 dwdODServer = "https://opendata.dwd.de/"
 cosmoD2Path = "weather/nwp/cosmo-d2/grib/"
 
@@ -13,12 +18,9 @@ def getModelFileName(date: dt.datetime, parameter: str, nr1: int, nr2: int):
 
 
 
-
-
 def getModelFileNameUnzipped(date, parameter, nr1, nr2):
     fileNameZipped = getModelFileName(date, parameter, nr1, nr2)
     return fileNameZipped[:-4]
-
 
 
 

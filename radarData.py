@@ -221,6 +221,23 @@ def getLabeledTimeseries(fromTime, toTime):
 
 
 
-def getOverlappingLabeledTimeseries(fromTime, toTime, seriesLength = 10, skipBetween = 0):
+def getOverlappingLabeledTimeseries(batchSize, fromTime, toTime, timeSteps = 10, skipBetween = 0):
     """ lädt eine labeled timeseries und formattiert sie so, dass für keras brauchbar """
     labeledSeries = getLabeledTimeseries(fromTime, toTime)
+    imageWidth, imageHeight = labeledSeries[0].data.shape
+    data_in = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+    data_out = np.zeros([batchSize, 3])
+    timeSteps = map(lambda el: el.time, labeledSeries)
+    for time in timeSteps:
+        
+
+# def createDummyDataset(batchSize, timeSteps, imageWidth, imageHeight):
+#     data_in = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+#     data_out = np.zeros([batchSize])
+#     for batch in range(batchSize):
+#         timeSeries = createTimeSeries(imageSize=imageWidth, timeSteps=timeSteps)
+#         data_in[batch, :, :, :, :] = timeSeries
+#         data_out[batch] = hasStorm(timeSeries, imageWidth*imageHeight)
+#     np.save("data_in", data_in)
+#     np.save("data_out", data_out)
+#     return data_in, data_out
