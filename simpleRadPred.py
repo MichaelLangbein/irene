@@ -4,9 +4,38 @@
 
 import numpy as np
 import tensorflow.keras as k
-import npyData as nd
+import radarData as rd
+import datetime as dt
 
 
+
+timeSteps = 7
+fromTime = dt.datetime(2016, 5, 1)
+toTime = dt.datetime(2016, 9, 30)
+trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(fromTime, toTime, timeSteps)
+imageWidth, imageHeight = trainingData[0].shape
+
+
+model = k.models.Sequential(
+    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, 1)),
+    k.layers.MaxPool3D(),
+    k.layers.Conv3D(5, (2,2,2)),
+    k.layers.MaxPool3D(),
+    k.layers.Conv3D(5, (2,2,2)),
+    k.layers.MaxPool3D(),
+    k.layers.Dense(33),
+    k.layers.Dense(10),
+    k.layers.Dense(3)
+)
+
+
+model.compile(
+    optimizer=k.optimizers.Adam(),
+    loss=k.losses.mean_squared_error
+)
+
+
+model.fit(x=trainingData, y=trainingLabels, batch_size=batchSize, epochs=10)
 
 
 
