@@ -1,3 +1,4 @@
+import os
 import bz2
 import tarfile
 import datetime as dt
@@ -8,6 +9,8 @@ import ftplib
 
 def extract(path, fileName):
     fullName = path + fileName
+    if not os.path.isfile(fullName):
+        raise Exception("File {} does not exist!".format(fullName))
     if (fullName.endswith("tar.gz")):
         with tarfile.open(fullName, "r:gz") as tar:
             tar.extractall(path)

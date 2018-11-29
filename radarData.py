@@ -220,30 +220,39 @@ def getLabeledTimeseries(fromTime, toTime):
         frame.labels = analyseTimestep(frame.time, rawData)
     return series
 
+def cropAroundMaximum(series, size):
+    """ 
+    findet position des maximums einer serie von RadarFrames.
+    schneidet aus jedem frame ein fenster um dieses maximum herum aus.
+    """
+    pass
 
 
-def getOverlappingLabeledTimeseries(fromTime, toTime, timeSteps = 10):
-    """ lädt eine labeled timeseries und formattiert sie so, dass für keras brauchbar """
+def normalizeToMaximum(series):
+    """
+    findet maximum einer serie von RadarFrames.
+    normalisiert ganze serie zu diesem maximum.
+    """
+    pass
+
+
+def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10):
+    """ 
+     - lädt eine labeled timeseries
+     - formattiert sie so, dass für keras brauchbar
+     - TODO: crop'en der Daten, so dass nur interessante events zu sehen
+     - TODO: Normalisieren der Daten 
+    """
     labeledSeries = getLabeledTimeseries(fromTime, toTime)
-    imageWidth, imageHeight = labeledSeries[0].data.shape
-    batchSize = len(labeledSeries)
+    imageWidth = imageHeight = imageSize
+    batchSize = len(labeledSeries) - timeSteps
     dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
     dataOut = np.zeros([batchSize, 3])
-    for batchNr in range(batchSize) - timeSteps:
+    for batchNr in range(batchSize):
         subSeries = labeledSeries[batchNr:batchNr+timeSteps]
+        subSeries = cropAroundMaximum(subSeries, imageWidth)
         for timeNr, frame in enumerate(subSeries):
             dataIn[batchNr, timeNr, :, :, 1] = frame.data
-            dataOut[batchNr, :] = frame.labels
+        dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps + 1].labels
     return (dataIn, dataOut)
         
-
-# def createDummyDataset(batchSize, timeSteps, imageWidth, imageHeight):
-#     data_in = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-#     data_out = np.zeros([batchSize])
-#     for batch in range(batchSize):
-#         timeSeries = createTimeSeries(imageSize=imageWidth, timeSteps=timeSteps)
-#         data_in[batch, :, :, :, :] = timeSeries
-#         data_out[batch] = hasStorm(timeSeries, imageWidth*imageHeight)
-#     np.save("data_in", data_in)
-#     np.save("data_out", data_out)
-#     return data_in, data_out
