@@ -30,8 +30,29 @@ class RadarFrame:
     def __init__(self, time: dt.datetime, data: np.array, bbox: list, pixelSize):
         self.time = time
         self.data = data
-        self.bbox = None
-        self.pixelSize = None
+        self.bbox = bbox
+        self.pixelSize = pixelSize
+
+    def getMaximumWithIndex(self):
+        maxX, maxY = np.unravel_index(np.argmax(self.data, axis=None), self.data.shape)
+        maxV = self.data[maxX, maxY]
+        return (maxV, maxX, maxY)
+
+    def getMaximumWithCoords(self):
+        maxV, maxX, maxY = self.getMaximumWithIndex()
+        maxXC, maxYC = self.getCoordsOfIndex(maxX, maxY)
+        return (maxV, maxXC, maxYC)
+
+    def getCoordsOfIndex(self, x, y):
+        pass
+    
+    def cropAroundIndex(self, x, y, w):
+        """ also updates metadata, so that coordinate-calculation doesnt go wrong """
+        pass
+
+    def cropAroundCoords(self, x, y, w):
+        """ also updates metadata, so that coordinate-calculation doesnt go wrong """
+        pass
 
 
 
@@ -220,12 +241,28 @@ def getLabeledTimeseries(fromTime, toTime):
         frame.labels = analyseTimestep(frame.time, rawData)
     return series
 
+
+
 def cropAroundMaximum(series, size):
     """ 
     findet position des maximums einer serie von RadarFrames.
     schneidet aus jedem frame ein fenster um dieses maximum herum aus.
     """
-    pass
+    maximum = 0.0
+    maxX = 0
+    maxY = 0
+    maxT = 0
+    for timeStep, frame in enumerate(series):
+        (localMax, localMaxX, localMaxY) = frame.getMaximumWithCoords()
+        if localMax > maximum:
+            maximum = localMax
+            maxX = localMaxX
+            maxY = localMaxY
+            maxT = timeStep
+    print("Now cropping series around t={}, x={}, y={}, v={}")
+    for frame in series:
+        frame.cropAroundCoords(maxX, maxY, size)
+
 
 
 def normalizeToMaximum(series):
@@ -250,7 +287,7 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10)
     dataOut = np.zeros([batchSize, 3])
     for batchNr in range(batchSize):
         subSeries = labeledSeries[batchNr:batchNr+timeSteps]
-        subSeries = cropAroundMaximum(subSeries, imageWidth)
+        cropAroundMaximum(subSeries, imageWidth)
         for timeNr, frame in enumerate(subSeries):
             dataIn[batchNr, timeNr, :, :, 1] = frame.data
         dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps + 1].labels
