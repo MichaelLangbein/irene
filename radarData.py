@@ -44,15 +44,26 @@ class RadarFrame:
         return (maxV, maxXC, maxYC)
 
     def getCoordsOfIndex(self, x, y):
-        pass
+        cX0 = self.bbox[0]
+        cY0 = self.bbox[1]
+        cX = cX0 + self.pixelSize * x
+        cY = cY0 + self.pixelSize * y
+        return (cX, cY)
+
+    def getIndexOfCoords(self, cX, cY):
+        cX0 = self.bbox[0]
+        cY0 = self.bbox[1]
+        x = (cX - cX0) / self.pixelSize
+        y = (cY - cY0) / self.pixelSize
+        return (x, y)
     
     def cropAroundIndex(self, x, y, w):
-        """ also updates metadata, so that coordinate-calculation doesnt go wrong """
+        """ also updates metadata, so that coordinate-calculation doesn't go wrong """
         pass
 
-    def cropAroundCoords(self, x, y, w):
-        """ also updates metadata, so that coordinate-calculation doesnt go wrong """
-        pass
+    def cropAroundCoords(self, cX, cY, w):
+        x, y = self.getIndexOfCoords(cX, cY)
+        self.cropAroundIndex(x, y, w)
 
 
 
