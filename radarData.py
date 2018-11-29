@@ -6,6 +6,8 @@
 # Aktuelle Daten (Radar nur binär): https://opendata.dwd.de/weather/nwp/
 # Historische Daten (aber keine Modellvorhersagen): ftp://ftp-cdc.dwd.de/pub/CDC/
 
+# TODO: wie umgehen mit fehlenden Daten?
+
 from utils import extract, httpDownloadFile, MyFtpServer
 import os
 import pygrib as pg
@@ -59,11 +61,14 @@ class RadarFrame:
     
     def cropAroundIndex(self, x, y, w):
         """ also updates metadata, so that coordinate-calculation doesn't go wrong """
+        if w < 3 or x%2 != 0:
+            raise Exception("Cropping dataframe: the windows width must be uneven, so that every corner has an equal distance from the center")
         X, Y = self.data.shape
-        xf = x - w/2
-        xt = x + w/2
-        yf = y - w/2
-        yt = y + w/2
+        d = (w-1)/2
+        xf = x - d
+        xt = x + d
+        yf = y - d
+        yt = y + d
         distToLeft = xf
         if distToLeft < 0:
             xf += abs(distToLeft)
@@ -206,7 +211,8 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, bbox = None):
                 else:
                     print("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
                     downloadUnzipRadar(time)
-        data.append(fileToRadarFrame(time))
+        if os.path.isfile(fullFileName):
+            data.append(fileToRadarFrame(time))
     return data
 
 
@@ -217,9 +223,12 @@ def hatStarkregen(series, time: dt.datetime):
     15 bis 25 l/m² in 1 Stunde
     20 bis 35 l/m² in 6 Stunden
     """
+    hourNew = time.hour - 6
+    if hourNew < 0:
+        hourNew = 23 - abs(hourNew)
+    fromTime = time.replace(hour=hourNew)
     toTime = time
-    fromTime = time.replace(hour=time.hour - 6)
-    lastSixHours = filter(lambda el: (fromTime <= el.time <= toTime), series)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
     sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
     lastEntry = lastSixHours[-1]
     shortTerm = (250 >= np.max(lastEntry) >= 150)
@@ -235,7 +244,7 @@ def hatHeftigerStarkregen(series, time: dt.datetime):
     """
     toTime = time
     fromTime = time.replace(hour=time.hour - 6)
-    lastSixHours = filter(lambda el: (fromTime <= el.time <= toTime), series)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
     sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
     lastEntry = lastSixHours[-1]
     shortTerm = (400 >= np.max(lastEntry) > 250)
@@ -251,7 +260,7 @@ def hatExtremerStarkregen(series, time: dt.datetime):
     """
     toTime = time
     fromTime = time.replace(hour=time.hour - 6)
-    lastSixHours = filter(lambda el: (fromTime <= el.time <= toTime), series)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
     sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
     lastEntry = lastSixHours[-1]
     shortTerm = (np.max(lastEntry) >= 400)
@@ -272,9 +281,8 @@ def getLabeledTimeseries(fromTime, toTime):
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
     # TODO: speichere und lade eine solche timeseries als pickle
     series = getRadarData(fromTime, toTime)
-    rawData = map(lambda el: el.data, series)
     for frame in series:
-        frame.labels = analyseTimestep(frame.time, rawData)
+        frame.labels = analyseTimestep(series, frame.time)
     return series
 
 

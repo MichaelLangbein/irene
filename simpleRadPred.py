@@ -1,6 +1,6 @@
 # ConvNet
 # Takes series of radar-images as input 
-# Predicts the catigorisation of the next radar-image
+# Predicts the categorisation of the next radar-image
 
 import numpy as np
 import tensorflow.keras as k
@@ -10,9 +10,9 @@ import datetime as dt
 
 
 timeSteps = 7
-fromTime = dt.datetime(2016, 9, 1)
-toTime = dt.datetime(2016, 9, 30)
-imageSize = 20
+fromTime = dt.datetime(2016, 9, 12)
+toTime = dt.datetime(2016, 9, 15)
+imageSize = 21
 trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
 batchSize, timeSteps, imageWidth, imageHeight, channels = trainingData.shape
 
