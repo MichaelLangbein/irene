@@ -6,7 +6,7 @@
 # Aktuelle Daten (Radar nur binär): https://opendata.dwd.de/weather/nwp/
 # Historische Daten (aber keine Modellvorhersagen): ftp://ftp-cdc.dwd.de/pub/CDC/
 
-from utils import extract, ftpDownloadFile, httpDownloadFile
+from utils import extract, httpDownloadFile, MyFtpServer
 import os
 import pygrib as pg
 import numpy as np
@@ -23,6 +23,7 @@ dwdFtpServer = "ftp-cdc.dwd.de"
 radolanPath = "pub/CDC/grids_germany/hourly/radolan/recent/asc/"
 radolanPathHistoric = "pub/CDC/grids_germany/hourly/radolan/historical/asc/"
 
+ftpServer = MyFtpServer(dwdFtpServer)
 
 
 class RadarFrame:
@@ -104,13 +105,13 @@ def downloadUnzipRadar(date: dt.datetime):
     try:
         fileName = getRadarFileNameDayArchive(date)
         print("Searching for file {} in recent-data-dir {}:".format(fileName, radolanPath))
-        ftpDownloadFile(dwdFtpServer, radolanPath, fileName, rawDataDir)
+        ftpServer.downloadFile(radolanPath, fileName, rawDataDir)
         extract(rawDataDir, fileName)  
     except ftplib.error_perm:
         fileName = getRadarFileNameMonthArchive(date)
         print("Searching for file {} in historical-data-dir {}:".format(fileName, radolanPathHistoric))
         fullRadolanPathHistory = radolanPathHistoric + date.strftime("%Y") + "/"
-        ftpDownloadFile(dwdFtpServer, fullRadolanPathHistory, fileName, rawDataDir)
+        ftpServer.downloadFile(fullRadolanPathHistory, fileName, rawDataDir)
         extract(rawDataDir, fileName)
         fileNameMonth = getRadarFileNameDayArchive(date)
         print("Now extracting sub-archive {}".format(fileNameMonth))
@@ -136,12 +137,12 @@ def getRadarData(fromTime, toTime, bbox = None):
             print("Found file {} locally".format(fullFileName))
         else:
             archiveFileName = getRadarFileNameDayArchive(time)
-            if os.path.isfile(archiveFileName):
+            if os.path.isfile(rawDataDir + archiveFileName):
                 print("Found file {} locally. Extracting now.".format(archiveFileName))
                 extract(rawDataDir, archiveFileName)
             else:
                 archiveArchiveFileName = getRadarFileNameMonthArchive(time)
-                if os.path.isfile(archiveArchiveFileName):
+                if os.path.isfile(rawDataDir + archiveArchiveFileName):
                     print("Found file {} locally. Extracting now".format(archiveArchiveFileName))
                     extract(rawDataDir, archiveArchiveFileName)
                     extract(rawDataDir, archiveFileName)
@@ -221,14 +222,19 @@ def getLabeledTimeseries(fromTime, toTime):
 
 
 
-def getOverlappingLabeledTimeseries(batchSize, fromTime, toTime, timeSteps = 10, skipBetween = 0):
+def getOverlappingLabeledTimeseries(fromTime, toTime, timeSteps = 10):
     """ lädt eine labeled timeseries und formattiert sie so, dass für keras brauchbar """
     labeledSeries = getLabeledTimeseries(fromTime, toTime)
     imageWidth, imageHeight = labeledSeries[0].data.shape
-    data_in = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-    data_out = np.zeros([batchSize, 3])
-    timeSteps = map(lambda el: el.time, labeledSeries)
-    for time in timeSteps:
+    batchSize = len(labeledSeries)
+    dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+    dataOut = np.zeros([batchSize, 3])
+    for batchNr in range(batchSize) - timeSteps:
+        subSeries = labeledSeries[batchNr:batchNr+timeSteps]
+        for timeNr, frame in enumerate(subSeries):
+            dataIn[batchNr, timeNr, :, :, 1] = frame.data
+            dataOut[batchNr, :] = frame.labels
+    return (dataIn, dataOut)
         
 
 # def createDummyDataset(batchSize, timeSteps, imageWidth, imageHeight):

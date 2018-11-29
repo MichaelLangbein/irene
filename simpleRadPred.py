@@ -13,7 +13,7 @@ timeSteps = 7
 fromTime = dt.datetime(2016, 5, 1)
 toTime = dt.datetime(2016, 9, 30)
 trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(fromTime, toTime, timeSteps)
-imageWidth, imageHeight = trainingData[0].shape
+batchSize, timeSteps, imageWidth, imageHeight, channels = trainingData.shape
 
 
 model = k.models.Sequential(

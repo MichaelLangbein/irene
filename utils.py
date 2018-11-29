@@ -38,7 +38,7 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
 
 
 
-def ftpDownloadFile(serverName, path, fileName, targetDir, attemptNr=1):
+def ftpDownloadFile(serverName, path, fileName, targetDir):
     """
     >>> ftpDownloadFile(dwdFtpServer, radolanPath, "RW-20180101.tar.gz", rawDataDir)
     """
@@ -52,3 +52,24 @@ def ftpDownloadFile(serverName, path, fileName, targetDir, attemptNr=1):
             print("Now saving data in {}".format(fullFile))
             ftp.retrbinary("RETR " + fileName, fileHandle.write)
 
+
+
+class MyFtpServer:
+    """ macht dasselbe wie ftpDownloadFile, aber stateful, so dass nicht jedes mal
+    neue Verbindung erzeugt wird."""
+
+    def __init__(self, serverName):
+        self.server = FTP(serverName)
+        self.server.login()
+
+    def __del__(self):
+        self.server.quit()
+
+    def downloadFile(self, path, fileName, targetDir):
+        fullFile = targetDir + fileName
+        self.server.cwd("/")
+        with open(fullFile, "wb") as fileHandle:
+            print("Now moving to path {}".format(path))
+            self.server.cwd(path)
+            print("Now saving data in {}".format(fullFile))
+            self.server.retrbinary("RETR " + fileName, fileHandle.write)
