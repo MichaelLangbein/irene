@@ -59,7 +59,32 @@ class RadarFrame:
     
     def cropAroundIndex(self, x, y, w):
         """ also updates metadata, so that coordinate-calculation doesn't go wrong """
-        pass
+        X, Y = self.data.shape
+        xf = x - w/2
+        xt = x + w/2
+        yf = y - w/2
+        yt = y + w/2
+        distToLeft = xf
+        if distToLeft < 0:
+            xf += abs(distToLeft)
+            xt += abs(distToLeft)
+        distToRight = X - xt
+        if distToRight < 0:
+            xf -= abs(distToRight)
+            xt -= abs(distToRight)
+        distToTop = yf
+        if distToTop < 0:
+            yf += abs(distToTop)
+            yt += abs(distToTop)
+        distToBot = Y - yt
+        if distToBot < 0:
+            yf -= abs(distToBot)
+            yt -= abs(distToBot)
+        newBbox = self.getCoordsOfIndex(xf, yf)
+        self.bbox = newBbox
+        newData = self.data[xf:xt, yf:yt]
+        self.data = newData
+        
 
     def cropAroundCoords(self, cX, cY, w):
         x, y = self.getIndexOfCoords(cX, cY)
@@ -85,8 +110,8 @@ def getRadarFileNameMonthArchive(date: dt.datetime):
 
 
 
-def radarDataToNpy(date: dt.datetime):
-    """ reads out already donwloaded and extracted ascii file into numpy array """
+def fileToRadarFrame(date: dt.datetime):
+    """ reads out already donwloaded and extracted ascii file into RadarFrame """
     fullFileName = rawDataDir + getRadarFileName(date)
     with open(fullFileName, "r") as f:
         print("Reading data from {}".format(fullFileName))
@@ -151,7 +176,7 @@ def downloadUnzipRadar(date: dt.datetime):
 
 
 
-def getRadarData(fromTime, toTime, bbox = None):
+def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, bbox = None):
     """
     >>> data = getRadarData(dt.datetime(2018, 10, 14, 0, 50), dt.datetime(2018, 10, 15, 0, 0))
     >>> for time in data:
@@ -181,7 +206,7 @@ def getRadarData(fromTime, toTime, bbox = None):
                 else:
                     print("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
                     downloadUnzipRadar(time)
-        data.append(radarDataToNpy(time))
+        data.append(fileToRadarFrame(time))
     return data
 
 
@@ -288,7 +313,7 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10)
     """ 
      - lädt eine labeled timeseries
      - formattiert sie so, dass für keras brauchbar
-     - TODO: crop'en der Daten, so dass nur interessante events zu sehen
+     - crop'en der Daten, so dass nur interessante events zu sehen
      - TODO: Normalisieren der Daten 
     """
     labeledSeries = getLabeledTimeseries(fromTime, toTime)

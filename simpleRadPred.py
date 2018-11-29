@@ -12,7 +12,8 @@ import datetime as dt
 timeSteps = 7
 fromTime = dt.datetime(2016, 9, 1)
 toTime = dt.datetime(2016, 9, 30)
-trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(fromTime, toTime, timeSteps)
+imageSize = 20
+trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
 batchSize, timeSteps, imageWidth, imageHeight, channels = trainingData.shape
 
 
