@@ -65,8 +65,8 @@ class MyFtpServer:
         self.server = FTP(serverName)
         self.server.login()
 
-    def __del__(self):
-        self.server.quit()
+    #def __del__(self):
+    #    self.server.quit()
 
     def downloadFile(self, path, fileName, targetDir):
         fullFile = targetDir + fileName

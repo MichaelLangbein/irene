@@ -9,24 +9,25 @@ import datetime as dt
 
 
 
-timeSteps = 7
-fromTime = dt.datetime(2016, 9, 14)
+timeSteps = 15
+fromTime = dt.datetime(2016, 9, 12)
 toTime = dt.datetime(2016, 9, 15)
-imageSize = 21
+imageSize = 41
 trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
 batchSize, timeSteps, imageWidth, imageHeight, channels = trainingData.shape
 
 
 model = k.models.Sequential([
-    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, 1)),
+    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, 1), name="conv1"),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(5, (2,2,2)),
+    k.layers.Conv3D(5, (2,2,2), name="conv2"),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(5, (2,2,2)),
+    k.layers.Conv3D(5, (2,2,2), name="conv3"),
     k.layers.MaxPool3D(),
-    k.layers.Dense(33),
-    k.layers.Dense(10),
-    k.layers.Dense(3)
+    k.layers.Flatten(),
+    k.layers.Dense(33, name="dense1"),
+    k.layers.Dense(10, name="dense2"),
+    k.layers.Dense(3, name="dense3")
 ])
 
 

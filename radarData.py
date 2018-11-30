@@ -61,7 +61,7 @@ class RadarFrame:
     
     def cropAroundIndex(self, x, y, w):
         """ also updates metadata, so that coordinate-calculation doesn't go wrong """
-        if w < 3 or x%2 != 0:
+        if w < 3 or w%2 != 1:
             raise Exception("Cropping dataframe: the windows width must be uneven, so that every corner has an equal distance from the center")
         X, Y = self.data.shape
         d = int((w-1)/2)
