@@ -64,11 +64,11 @@ class RadarFrame:
         if w < 3 or x%2 != 0:
             raise Exception("Cropping dataframe: the windows width must be uneven, so that every corner has an equal distance from the center")
         X, Y = self.data.shape
-        d = (w-1)/2
-        xf = x - d
-        xt = x + d
-        yf = y - d
-        yt = y + d
+        d = int((w-1)/2)
+        xf = int(x - d)
+        xt = int(x + d + 1)
+        yf = int(y - d)
+        yt = int(y + d + 1)
         distToLeft = xf
         if distToLeft < 0:
             xf += abs(distToLeft)
@@ -137,15 +137,15 @@ def fileToRadarFrame(date: dt.datetime):
                 metaData["NODATA_value"] = lineData[1]
                 print("Read this metadata from file:")
                 print(metaData)
-                data = np.zeros([int(metaData["nrows"]), int(metaData["ncols"])])
+                data = np.zeros([int(metaData["nrows"]), int(metaData["ncols"])], dtype=np.float32)
             else:
                 row = nr - 6
                 for col, el in enumerate(lineData):
                     #if el == metaData["NODATA_value"]:
                     #    data[row, col] = None
                     #else:
-                        data[row, col] = el
-    frame = RadarFrame(date, data, [metaData["xllcorner"], metaData["yllcorner"]], metaData["cellsize"])
+                        data[row, col] = float(el)
+    frame = RadarFrame(date, data, [int(metaData["xllcorner"]), int(metaData["yllcorner"])], int(metaData["cellsize"]))
     return frame
 
 
@@ -223,14 +223,11 @@ def hatStarkregen(series, time: dt.datetime):
     15 bis 25 l/m² in 1 Stunde
     20 bis 35 l/m² in 6 Stunden
     """
-    hourNew = time.hour - 6
-    if hourNew < 0:
-        hourNew = 23 - abs(hourNew)
-    fromTime = time.replace(hour=hourNew)
     toTime = time
+    fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
-    lastEntry = lastSixHours[-1]
+    sixHourSum = np.sum([el.data for el in lastSixHours])
+    lastEntry = lastSixHours[-1].data
     shortTerm = (250 >= np.max(lastEntry) >= 150)
     longTerm = (350 >= np.max(sixHourSum) >= 200)
     return (shortTerm or longTerm)
@@ -243,10 +240,10 @@ def hatHeftigerStarkregen(series, time: dt.datetime):
     35 bis 60 l/m² in 6 Stunden
     """
     toTime = time
-    fromTime = time.replace(hour=time.hour - 6)
+    fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
-    lastEntry = lastSixHours[-1]
+    sixHourSum = np.sum([el.data for el in lastSixHours])
+    lastEntry = lastSixHours[-1].data
     shortTerm = (400 >= np.max(lastEntry) > 250)
     longTerm = (600 >= np.max(sixHourSum) > 350)
     return (shortTerm or longTerm)
@@ -259,10 +256,10 @@ def hatExtremerStarkregen(series, time: dt.datetime):
     > 60 l/m² in 6 Stunden
     """
     toTime = time
-    fromTime = time.replace(hour=time.hour - 6)
+    fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = map(lambda carry, el: carry + el, lastSixHours)
-    lastEntry = lastSixHours[-1]
+    sixHourSum = np.sum([el.data for el in lastSixHours])
+    lastEntry = lastSixHours[-1].data
     shortTerm = (np.max(lastEntry) >= 400)
     longTerm = (np.max(sixHourSum) >= 600)
     return (shortTerm or longTerm)
@@ -303,7 +300,7 @@ def cropAroundMaximum(series, size):
             maxX = localMaxX
             maxY = localMaxY
             maxT = timeStep
-    print("Now cropping series around t={}, x={}, y={}, v={}")
+    print("Now cropping series around t={}, x={}, y={}, v={}".format(maxT, maxX, maxY, maximum))
     for frame in series:
         frame.cropAroundCoords(maxX, maxY, size)
 
@@ -331,9 +328,9 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10)
     dataOut = np.zeros([batchSize, 3])
     for batchNr in range(batchSize):
         subSeries = labeledSeries[batchNr:batchNr+timeSteps]
-        cropAroundMaximum(subSeries, imageWidth)
+        cropAroundMaximum(subSeries, imageSize)
         for timeNr, frame in enumerate(subSeries):
-            dataIn[batchNr, timeNr, :, :, 1] = frame.data
-        dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps + 1].labels
+            dataIn[batchNr, timeNr, :, :, 0] = frame.data
+        dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps].labels
     return (dataIn, dataOut)
         
