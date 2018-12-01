@@ -181,7 +181,7 @@ def downloadUnzipRadar(date: dt.datetime):
 
 
 
-def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, bbox = None):
+def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
     """
     >>> data = getRadarData(dt.datetime(2018, 10, 14, 0, 50), dt.datetime(2018, 10, 15, 0, 0))
     >>> for time in data:
@@ -190,7 +190,7 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, bbox = None):
     """
     data = []
     fromTime = fromTime.replace(minute=50)
-    timeSteps = getTimeSteps(fromTime, toTime, 3)
+    timeSteps = getTimeSteps(fromTime, toTime, deltaHours)
     for time in timeSteps:
         print("Getting data for time {}".format(time))
         fileName = getRadarFileName(time)
@@ -274,10 +274,10 @@ def analyseTimestep(series, time: dt.datetime):
 
 
 
-def getLabeledTimeseries(fromTime, toTime):
+def getLabeledTimeseries(fromTime, toTime, deltaHours=1):
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
     # TODO: speichere und lade eine solche timeseries als pickle
-    series = getRadarData(fromTime, toTime)
+    series = getRadarData(fromTime, toTime, deltaHours)
     for frame in series:
         frame.labels = analyseTimestep(series, frame.time)
     return series
@@ -314,14 +314,14 @@ def normalizeToMaximum(series):
     pass
 
 
-def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10):
+def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10, deltaHours = 1):
     """ 
      - lädt eine labeled timeseries
      - formattiert sie so, dass für keras brauchbar
      - crop'en der Daten, so dass nur interessante events zu sehen
      - TODO: Normalisieren der Daten 
     """
-    labeledSeries = getLabeledTimeseries(fromTime, toTime)
+    labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
     imageWidth = imageHeight = imageSize
     batchSize = len(labeledSeries) - timeSteps
     dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
@@ -334,3 +334,31 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10)
         dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps].labels
     return (dataIn, dataOut)
         
+
+
+
+class GeneratorFactory:
+    def __init__(self, batchSize, timeSteps, imageSize):
+        if imageSize < 3 or imageSize%2 != 1:
+            raise Exception("Image size must be uneven, so that maximum is centered!")
+        self.batchSize = batchSize
+        self.timeSteps = timeSteps
+        self.imageSize = imageSize
+
+    def getDimensions(self):
+        return (self.batchSize, self.timeSteps, self.imageSize, self.imageSize, 1)
+
+    def createGenerator(self):
+        timeSteps = self.timeSteps
+        imageSize = self.imageSize
+        def generator():
+            while True:
+                year = np.random.randint(2006, 2017)   
+                month = np.random.randint(4, 11)
+                day = np.random.randint(1, 27)
+                fromTime = dt.datetime(year, month, day)
+                toTime = fromTime + dt.timedelta(hours=(self.timeSteps + self.batchSize))
+                print("Fetching data from {} to {}".format(fromTime, toTime))
+                data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
+                yield (data, labels)
+        return generator

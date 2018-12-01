@@ -9,12 +9,13 @@ import datetime as dt
 
 
 
+batchSize = 20
 timeSteps = 15
-fromTime = dt.datetime(2016, 9, 12)
-toTime = dt.datetime(2016, 9, 15)
 imageSize = 41
-trainingData, trainingLabels = rd.getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-batchSize, timeSteps, imageWidth, imageHeight, channels = trainingData.shape
+genFac = rd.GeneratorFactory(batchSize, timeSteps, imageSize)
+trainingGenerator = genFac.createGenerator()
+validationGenerator = genFac.createGenerator()
+batchSize, timeSteps, imageWidth, imageHeight, channels = genFac.getDimensions()
 
 
 model = k.models.Sequential([
@@ -36,8 +37,11 @@ model.compile(
     loss=k.losses.mean_squared_error
 )
 
-
-model.fit(x=trainingData, y=trainingLabels, batch_size=batchSize, epochs=10)
-
-
+history = model.fit_generator(
+    generator=trainingGenerator(),
+    steps_per_epoch=30,       # number of batches to be drawn from generator
+    epochs=3,                 # number of times the data is repeated
+    validation_data=validationGenerator(),
+    validation_steps=30       # number of batches to be drawn from generator
+)
 
