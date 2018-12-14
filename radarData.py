@@ -168,13 +168,13 @@ def downloadUnzipRadar(date: dt.datetime):
     try:
         fileName = getRadarFileNameDayArchive(date)
         print("Searching for file {} in recent-data-dir {}:".format(fileName, radolanPath))
-        ftpServer.downloadFile(radolanPath, fileName, rawDataDir)
+        ftpServer.tryDownloadNTimes(radolanPath, fileName, rawDataDir, 2)
         extract(rawDataDir, fileName)  
     except ftplib.error_perm:
         fileName = getRadarFileNameMonthArchive(date)
         print("Searching for file {} in historical-data-dir {}:".format(fileName, radolanPathHistoric))
         fullRadolanPathHistory = radolanPathHistoric + date.strftime("%Y") + "/"
-        ftpServer.downloadFile(fullRadolanPathHistory, fileName, rawDataDir)
+        ftpServer.tryDownloadNTimes(fullRadolanPathHistory, fileName, rawDataDir, 2)
         extract(rawDataDir, fileName)
         fileNameMonth = getRadarFileNameDayArchive(date)
         print("Now extracting sub-archive {}".format(fileNameMonth))

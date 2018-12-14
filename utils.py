@@ -2,6 +2,7 @@ import os
 import bz2
 import tarfile
 import datetime as dt
+from time import sleep
 import urllib.request
 from ftplib import FTP
 import ftplib
@@ -62,6 +63,24 @@ class MyFtpServer:
     neue Verbindung erzeugt wird."""
 
     def __init__(self, serverName, user=None, passwd=None, proxy=None):
+        self.serverName = serverName
+        self.user = user
+        self.passwd = passwd
+        self.proxy = proxy
+        self.tryConnectNTimes(3)
+
+    def tryConnectNTimes(self, n):
+        try:
+            self.connect(self.serverName, self.user, self.passwd, self.proxy)
+        except EOFError as e:
+            if n > 0:
+                print("Connection error; retrying in a second ...")
+                sleep(1)
+                self.tryConnectNTimes(n-1)
+            else: 
+                raise e
+
+    def connect(self, serverName, user=None, passwd=None, proxy=None):
         if not user:
             user = "anonymous"
         if not proxy:
@@ -74,11 +93,24 @@ class MyFtpServer:
             self.server = FTP(proxy)
             self.server.login(userString, passwd)
         print("Connection established.")
+        return True
+
 
     def __del__(self):
         print("Now deleting Ftp-Server")
         #if self.server:
         #    self.server.quit()
+
+    def tryDownloadNTimes(self, path, fileName, targetDir, n):
+        try:
+            self.downloadFile(path, fileName, targetDir)
+        except EOFError as e:
+            if n > 0:
+                print("Download error; retrying in a second ...")
+                sleep(1)
+                self.tryDownloadNTimes(path, fileName, targetDir, n-1)
+            else:
+                raise e
 
     def downloadFile(self, path, fileName, targetDir):
         fullFile = targetDir + fileName
