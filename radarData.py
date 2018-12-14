@@ -9,6 +9,7 @@
 # TODO: wie umgehen mit fehlenden Daten?
 
 from utils import extract, httpDownloadFile, MyFtpServer
+import config as conf
 import os
 import pygrib as pg
 import numpy as np
@@ -25,7 +26,7 @@ dwdFtpServer = "ftp-cdc.dwd.de"
 radolanPath = "pub/CDC/grids_germany/hourly/radolan/recent/asc/"
 radolanPathHistoric = "pub/CDC/grids_germany/hourly/radolan/historical/asc/"
 
-ftpServer = MyFtpServer(dwdFtpServer)
+ftpServer = MyFtpServer(conf.dwdFtpServerName, conf.dwdFtpServerUser, conf.dwdFtpServerPass, conf.ftpProxy)
 
 
 class RadarFrame:

@@ -61,9 +61,19 @@ class MyFtpServer:
     """ macht dasselbe wie ftpDownloadFile, aber stateful, so dass nicht jedes mal
     neue Verbindung erzeugt wird."""
 
-    def __init__(self, serverName):
-        self.server = FTP(serverName)
-        self.server.login()
+    def __init__(self, serverName, user=None, passwd=None, proxy=None):
+        if not user:
+            user = "anonymous"
+        if not proxy:
+            print("Now connecting to {}@{} using {}".format(user, serverName, passwd))
+            self.server = FTP(serverName)
+            self.server.login(user, passwd)
+        else:
+            userString = "{}@{}".format(user, serverName)
+            print("Now connecting to {}@{} using {}".format(userString, proxy, passwd))
+            self.server = FTP(proxy)
+            self.server.login(userString, passwd)
+        print("Connection established.")
 
     def __del__(self):
         print("Now deleting Ftp-Server")
