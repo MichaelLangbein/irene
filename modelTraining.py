@@ -61,8 +61,9 @@ history = model.fit_generator(
 )
 
 
-tstp = t.time()
-model.save(tfDataDir + "simpleRadPredModel_{}.h5".format(tstp))
+tstp = int(t.time())
+modelName = "simpleRadPredModel.h5"
+model.save(tfDataDir + tstp + "/" + modelName)
 
 
 plt.plot(history.history['loss'])
@@ -71,4 +72,4 @@ plt.title('model loss')
 plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper right')
-plt.savefig(tfDataDir + "loss_{}.png".format(tstp))
+plt.savefig(tfDataDir + tstp + "/" + "loss.png")
