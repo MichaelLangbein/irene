@@ -114,7 +114,10 @@ class MyFtpServer:
             else:
                 raise e
         except BrokenPipeError as e:
+            print("Broken pipe. Trying to reconnect ...")
+            sleep(1)
             self.tryConnectNTimes(2)
+            self.tryDownloadNTimes(path, fileName, targetDir, n)
 
 
     def downloadFile(self, path, fileName, targetDir):
