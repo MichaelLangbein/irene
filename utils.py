@@ -28,7 +28,7 @@ def extract(path, fileName):
     except tarfile.ReadError as e:
         print("File appears corrupt. Deleting it")
         os.remove(fullName)
-        raise Exception("File {} does not exist!".format(fullName))
+        raise IOError("File {} does not exist!".format(fullName))
 
 
 
@@ -112,12 +112,12 @@ class MyFtpServer:
             self.downloadFile(path, fileName, targetDir)
         except EOFError as e:
             if n > 0:
-                print("Download error; retrying ...")
+                print("Download error {}; retrying ...".format(str(e)))
                 self.tryDownloadNTimes(path, fileName, targetDir, n-1)
             else:
                 raise e
         except BrokenPipeError as e:
-            print("Broken pipe. Trying to reconnect ...")
+            print("Broken pipe {}. Trying to reconnect ...".format(str(e)))
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)
         except ftplib.error_reply as e:

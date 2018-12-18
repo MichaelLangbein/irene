@@ -47,7 +47,7 @@ history = model.fit_generator(
     steps_per_epoch=15,       # number of batches to be drawn from generator
     epochs=3,                 # number of times the data is repeated
     validation_data=validationGenerator,
-    validation_steps=8       # number of batches to be drawn from generator
+    validation_steps=3       # number of batches to be drawn from generator
 )
 
 
@@ -55,21 +55,10 @@ tstp = t.time()
 model.save(tfDataDir + "simpleRadPredModel_{}.h5".format(tstp))
 
 
-
-
-plt.plot(history.history['acc'])
-plt.plot(history.history['val_acc'])
-plt.title('model accuracy')
-plt.ylabel('accuracy')
-plt.xlabel('epoch')
-plt.legend(['train', 'test'], loc='upper left')
-plt.savefig(tfDataDir + "accuracy_{}.png".format(tstp))
-
-
 plt.plot(history.history['loss'])
 plt.plot(history.history['val_loss'])
 plt.title('model loss')
 plt.ylabel('loss')
 plt.xlabel('epoch')
-plt.legend(['train', 'test'], loc='upper left')
+plt.legend(['train', 'test'], loc='upper right')
 plt.savefig(tfDataDir + "loss_{}.png".format(tstp))
