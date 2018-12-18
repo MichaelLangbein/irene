@@ -42,12 +42,23 @@ model.compile(
     loss=k.losses.mean_squared_error
 )
 
+
+checkpoint = k.callbacks.ModelCheckpoint(
+    tfDataDir + "simpleRadPredModel_checkpoint.h5", 
+    monitor="val_loss", 
+    verbose=1, 
+    save_best_only=True, 
+    mode="min"
+)
+
+
 history = model.fit_generator(
     generator=trainingGenerator,
     steps_per_epoch=15,       # number of batches to be drawn from generator
     epochs=3,                 # number of times the data is repeated
     validation_data=validationGenerator,
-    validation_steps=3       # number of batches to be drawn from generator
+    validation_steps=3,       # number of batches to be drawn from generator
+    callbacks=[checkpoint]
 )
 
 
