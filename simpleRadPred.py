@@ -9,6 +9,8 @@ import time as t
 import matplotlib.pyplot as plt
 
 
+thisDir = os.path.dirname(os.path.abspath(__file__))
+tfDataDir = thisDir + "/tfData/"
 
 batchSize = 20
 timeSteps = 15
@@ -49,7 +51,7 @@ history = model.fit_generator(
 
 
 tstp = t.time()
-model.save("simpleRadPredModel_{}.h5".format(tstp))
+model.save(tfDataDir + "simpleRadPredModel_{}.h5".format(tstp))
 
 
 
@@ -60,7 +62,7 @@ plt.title('model accuracy')
 plt.ylabel('accuracy')
 plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper left')
-plt.savefig("accuracy_{}.png".format(tstp))
+plt.savefig(tfDataDir + "accuracy_{}.png".format(tstp))
 
 
 plt.plot(history.history['loss'])
@@ -69,4 +71,4 @@ plt.title('model loss')
 plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper left')
-plt.savefig("loss_{}.png".format(tstp))
+plt.savefig(tfDataDir + "loss_{}.png".format(tstp))

@@ -269,11 +269,16 @@ def analyseTimestep(series, time: dt.datetime):
     return labels
 
 
+class KeineDatenException(Exception):
+    pass
+
 
 def getLabeledTimeseries(fromTime, toTime, deltaHours=1):
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
     # TODO: speichere und lade eine solche timeseries als pickle
     series = getRadarData(fromTime, toTime, deltaHours)
+    if len(series) == 0:
+        raise KeineDatenException("Keine Radardaten zwischen {} und {}".format(fromTime, toTime))
     for frame in series:
         frame.labels = analyseTimestep(series, frame.time)
     return series
@@ -330,19 +335,28 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10,
     return (dataIn, dataOut)
         
 
+def getRandomBatch(batchSize, timeSteps, imageSize):
+    year = np.random.randint(2006, 2017)   
+    month = np.random.randint(4, 11)
+    day = np.random.randint(1, 27)
+    fromTime = dt.datetime(year, month, day)
+    toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
+    print("Fetching data from {} to {}".format(fromTime, toTime))
+    try:
+        data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
+    except KeineDatenException as e:
+        print("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
+        data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
+    return data, labels
+
 
 
 def radarGenerator(batchSize, timeSteps, imageSize):
     if imageSize < 3 or imageSize%2 != 1:
         raise Exception("Image size must be uneven, so that maximum is centered!")
     while True:
-        year = np.random.randint(2006, 2017)   
-        month = np.random.randint(4, 11)
-        day = np.random.randint(1, 27)
-        fromTime = dt.datetime(year, month, day)
-        toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
-        print("Fetching data from {} to {}".format(fromTime, toTime))
-        data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
+        data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
         yield (data, labels)
+            
 
 
