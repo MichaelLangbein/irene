@@ -69,6 +69,7 @@ class MyFtpServer:
         self.proxy = proxy
         self.tryConnectNTimes(3)
 
+
     def tryConnectNTimes(self, n):
         try:
             self.connect(self.serverName, self.user, self.passwd, self.proxy)
@@ -79,6 +80,7 @@ class MyFtpServer:
                 self.tryConnectNTimes(n-1)
             else: 
                 raise e
+
 
     def connect(self, serverName, user=None, passwd=None, proxy=None):
         if not user:
@@ -111,6 +113,9 @@ class MyFtpServer:
                 self.tryDownloadNTimes(path, fileName, targetDir, n-1)
             else:
                 raise e
+        except BrokenPipeError as e:
+            self.tryConnectNTimes(2)
+
 
     def downloadFile(self, path, fileName, targetDir):
         fullFile = targetDir + fileName

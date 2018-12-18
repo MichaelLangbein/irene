@@ -120,7 +120,6 @@ def fileToRadarFrame(date: dt.datetime):
     """ reads out already donwloaded and extracted ascii file into RadarFrame """
     fullFileName = rawDataDir + getRadarFileName(date)
     with open(fullFileName, "r") as f:
-        print("Reading data from {}".format(fullFileName))
         metaData = {}  
         for nr, line in enumerate(f):
             lineData = line.split()
@@ -136,8 +135,6 @@ def fileToRadarFrame(date: dt.datetime):
                 metaData["cellsize"] = lineData[1]
             elif nr == 5:
                 metaData["NODATA_value"] = lineData[1]
-                print("Read this metadata from file:")
-                print(metaData)
                 data = np.zeros([int(metaData["nrows"]), int(metaData["ncols"])], dtype=np.float32)
             else:
                 row = nr - 6
@@ -167,17 +164,14 @@ def downloadUnzipRadar(date: dt.datetime):
     """
     try:
         fileName = getRadarFileNameDayArchive(date)
-        print("Searching for file {} in recent-data-dir {}:".format(fileName, radolanPath))
         ftpServer.tryDownloadNTimes(radolanPath, fileName, rawDataDir, 2)
         extract(rawDataDir, fileName)  
     except ftplib.error_perm:
         fileName = getRadarFileNameMonthArchive(date)
-        print("Searching for file {} in historical-data-dir {}:".format(fileName, radolanPathHistoric))
         fullRadolanPathHistory = radolanPathHistoric + date.strftime("%Y") + "/"
         ftpServer.tryDownloadNTimes(fullRadolanPathHistory, fileName, rawDataDir, 2)
         extract(rawDataDir, fileName)
         fileNameMonth = getRadarFileNameDayArchive(date)
-        print("Now extracting sub-archive {}".format(fileNameMonth))
         extract(rawDataDir, fileNameMonth)
 
 
@@ -197,16 +191,17 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
         fileName = getRadarFileName(time)
         fullFileName = rawDataDir + fileName
         if os.path.isfile(fullFileName):
-            print("Found file {} locally".format(fullFileName))
+            #print("Found file {} locally".format(fullFileName))
+            pass
         else:
             archiveFileName = getRadarFileNameDayArchive(time)
             if os.path.isfile(rawDataDir + archiveFileName):
-                print("Found file {} locally. Extracting now.".format(archiveFileName))
+                #print("Found file {} locally. Extracting now.".format(archiveFileName))
                 extract(rawDataDir, archiveFileName)
             else:
                 archiveArchiveFileName = getRadarFileNameMonthArchive(time)
                 if os.path.isfile(rawDataDir + archiveArchiveFileName):
-                    print("Found file {} locally. Extracting now".format(archiveArchiveFileName))
+                    #print("Found file {} locally. Extracting now".format(archiveArchiveFileName))
                     extract(rawDataDir, archiveArchiveFileName)
                     extract(rawDataDir, archiveFileName)
                 else:
@@ -301,7 +296,6 @@ def cropAroundMaximum(series, size):
             maxX = localMaxX
             maxY = localMaxY
             maxT = timeStep
-    print("Now cropping series around t={}, x={}, y={}, v={}".format(maxT, maxX, maxY, maximum))
     for frame in series:
         frame.cropAroundCoords(maxX, maxY, size)
 
@@ -338,28 +332,17 @@ def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10,
 
 
 
-class GeneratorFactory:
-    def __init__(self, batchSize, timeSteps, imageSize):
-        if imageSize < 3 or imageSize%2 != 1:
-            raise Exception("Image size must be uneven, so that maximum is centered!")
-        self.batchSize = batchSize
-        self.timeSteps = timeSteps
-        self.imageSize = imageSize
+def radarGenerator(batchSize, timeSteps, imageSize):
+    if imageSize < 3 or imageSize%2 != 1:
+        raise Exception("Image size must be uneven, so that maximum is centered!")
+    while True:
+        year = np.random.randint(2006, 2017)   
+        month = np.random.randint(4, 11)
+        day = np.random.randint(1, 27)
+        fromTime = dt.datetime(year, month, day)
+        toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
+        print("Fetching data from {} to {}".format(fromTime, toTime))
+        data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
+        yield (data, labels)
 
-    def getDimensions(self):
-        return (self.batchSize, self.timeSteps, self.imageSize, self.imageSize, 1)
 
-    def createGenerator(self):
-        timeSteps = self.timeSteps
-        imageSize = self.imageSize
-        def generator():
-            while True:
-                year = np.random.randint(2006, 2017)   
-                month = np.random.randint(4, 11)
-                day = np.random.randint(1, 27)
-                fromTime = dt.datetime(year, month, day)
-                toTime = fromTime + dt.timedelta(hours=(self.timeSteps + self.batchSize))
-                print("Fetching data from {} to {}".format(fromTime, toTime))
-                data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-                yield (data, labels)
-        return generator

@@ -5,17 +5,19 @@
 import numpy as np
 import tensorflow.keras as k
 import radarData as rd
-import datetime as dt
+import time as t
+import matplotlib.pyplot as plt
 
 
 
 batchSize = 20
 timeSteps = 15
 imageSize = 41
-genFac = rd.GeneratorFactory(batchSize, timeSteps, imageSize)
-trainingGenerator = genFac.createGenerator()
-validationGenerator = genFac.createGenerator()
-batchSize, timeSteps, imageWidth, imageHeight, channels = genFac.getDimensions()
+imageWidth = imageSize
+imageHeight = imageSize
+channels = 1
+trainingGenerator = rd.radarGenerator(batchSize, timeSteps, imageSize)
+validationGenerator = rd.radarGenerator(batchSize, timeSteps, imageSize)
 
 
 model = k.models.Sequential([
@@ -38,10 +40,33 @@ model.compile(
 )
 
 history = model.fit_generator(
-    generator=trainingGenerator(),
+    generator=trainingGenerator,
     steps_per_epoch=30,       # number of batches to be drawn from generator
     epochs=3,                 # number of times the data is repeated
-    validation_data=validationGenerator(),
+    validation_data=validationGenerator,
     validation_steps=30       # number of batches to be drawn from generator
 )
 
+
+tstp = t.time()
+model.save("simpleRadPredModel_{}.h5".format(tstp))
+
+
+
+
+plt.plot(history.history['acc'])
+plt.plot(history.history['val_acc'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.savefig("accuracy_{}.png".format(tstp))
+
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.savefig("loss_{}.png".format(tstp))
