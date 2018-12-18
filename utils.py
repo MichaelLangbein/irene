@@ -12,18 +12,23 @@ def extract(path, fileName):
     fullName = path + fileName
     if not os.path.isfile(fullName):
         raise Exception("File {} does not exist!".format(fullName))
-    if (fullName.endswith("tar.gz")):
-        with tarfile.open(fullName, "r:gz") as tar:
-            tar.extractall(path)
-    elif (fullName.endswith("tar")):
-        with tarfile.open(fullName, "r:") as tar:
-            tar.extractall(path)
-    elif(fullName.endswith(".bz2")):
-        extractedName = fullName[:-4]
-        with bz2.BZ2File(fullName) as zipFile: # open the file
-            with open(extractedName, "wb") as file:
-                data = zipFile.read() # get the decompressed data
-                file.write(data)
+    try:
+        if (fullName.endswith("tar.gz")):
+            with tarfile.open(fullName, "r:gz") as tar:
+                tar.extractall(path)
+        elif (fullName.endswith("tar")):
+            with tarfile.open(fullName, "r:") as tar:
+                tar.extractall(path)
+        elif(fullName.endswith(".bz2")):
+            extractedName = fullName[:-4]
+            with bz2.BZ2File(fullName) as zipFile: # open the file
+                with open(extractedName, "wb") as file:
+                    data = zipFile.read() # get the decompressed data
+                    file.write(data)
+    except tarfile.ReadError as e:
+        print("File appears corrupt. Deleting it")
+        os.remove(fullName)
+        raise Exception("File {} does not exist!".format(fullName))
 
 
 
@@ -75,8 +80,7 @@ class MyFtpServer:
             self.connect(self.serverName, self.user, self.passwd, self.proxy)
         except EOFError as e:
             if n > 0:
-                print("Connection error; retrying in a second ...")
-                sleep(1)
+                print("Connection error; retrying ...")
                 self.tryConnectNTimes(n-1)
             else: 
                 raise e
@@ -108,16 +112,19 @@ class MyFtpServer:
             self.downloadFile(path, fileName, targetDir)
         except EOFError as e:
             if n > 0:
-                print("Download error; retrying in a second ...")
-                sleep(1)
+                print("Download error; retrying ...")
                 self.tryDownloadNTimes(path, fileName, targetDir, n-1)
             else:
                 raise e
         except BrokenPipeError as e:
             print("Broken pipe. Trying to reconnect ...")
-            sleep(1)
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)
+        except ftplib.error_reply as e:
+            print("Reply-problem {}. Trying again ...".format(str(e)))
+            self.tryConnectNTimes(2)
+            self.tryDownloadNTimes(path, fileName, targetDir, n)
+            
 
 
     def downloadFile(self, path, fileName, targetDir):

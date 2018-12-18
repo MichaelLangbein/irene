@@ -7,6 +7,7 @@ import tensorflow.keras as k
 import radarData as rd
 import time as t
 import matplotlib.pyplot as plt
+import os
 
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
@@ -43,10 +44,10 @@ model.compile(
 
 history = model.fit_generator(
     generator=trainingGenerator,
-    steps_per_epoch=30,       # number of batches to be drawn from generator
+    steps_per_epoch=15,       # number of batches to be drawn from generator
     epochs=3,                 # number of times the data is repeated
     validation_data=validationGenerator,
-    validation_steps=30       # number of batches to be drawn from generator
+    validation_steps=8       # number of batches to be drawn from generator
 )
 
 

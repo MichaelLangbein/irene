@@ -157,23 +157,28 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
     return out
 
 
-
-def downloadUnzipRadar(date: dt.datetime):
-    """
-    >>> downloadUnzipRadar(dt.datetime(2018,10,14))
-    """
-    try:
-        fileName = getRadarFileNameDayArchive(date)
-        ftpServer.tryDownloadNTimes(radolanPath, fileName, rawDataDir, 2)
-        extract(rawDataDir, fileName)  
-    except ftplib.error_perm:
-        fileName = getRadarFileNameMonthArchive(date)
-        fullRadolanPathHistory = radolanPathHistoric + date.strftime("%Y") + "/"
-        ftpServer.tryDownloadNTimes(fullRadolanPathHistory, fileName, rawDataDir, 2)
-        extract(rawDataDir, fileName)
-        fileNameMonth = getRadarFileNameDayArchive(date)
-        extract(rawDataDir, fileNameMonth)
-
+def getRadarDataForTime(time: dt.datetime):
+    fileName = getRadarFileName(time)
+    fullFileName = rawDataDir + fileName
+    if os.path.isfile(fullFileName):
+        data = fileToRadarFrame(time)
+    else:
+        archiveFileName = getRadarFileNameDayArchive(time)
+        if os.path.isfile(rawDataDir + archiveFileName):
+            extract(rawDataDir, archiveFileName)
+            data = getRadarDataForTime(time)
+        else:
+            archiveArchiveFileName = getRadarFileNameMonthArchive(time)
+            if os.path.isfile(rawDataDir + archiveArchiveFileName):
+                extract(rawDataDir, archiveArchiveFileName)
+                data = getRadarDataForTime(time)
+            else:
+                print("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
+                fileName = getRadarFileNameMonthArchive(time)
+                fullRadolanPathHistory = radolanPathHistoric + time.strftime("%Y") + "/"
+                ftpServer.tryDownloadNTimes(radolanPath, fileName, rawDataDir, 2)
+                data = getRadarDataForTime(time)
+    return data
 
 
 def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
@@ -183,32 +188,13 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
     >>>     print(time)
     >>>     print(np.max(data[time]))
     """
+    # TODO: hier bietet sich multithreading an
+    print("Getting data from {} to {}".format(fromTime, toTime))
     data = []
     fromTime = fromTime.replace(minute=50)
     timeSteps = getTimeSteps(fromTime, toTime, deltaHours)
     for time in timeSteps:
-        print("Getting data for time {}".format(time))
-        fileName = getRadarFileName(time)
-        fullFileName = rawDataDir + fileName
-        if os.path.isfile(fullFileName):
-            #print("Found file {} locally".format(fullFileName))
-            pass
-        else:
-            archiveFileName = getRadarFileNameDayArchive(time)
-            if os.path.isfile(rawDataDir + archiveFileName):
-                #print("Found file {} locally. Extracting now.".format(archiveFileName))
-                extract(rawDataDir, archiveFileName)
-            else:
-                archiveArchiveFileName = getRadarFileNameMonthArchive(time)
-                if os.path.isfile(rawDataDir + archiveArchiveFileName):
-                    #print("Found file {} locally. Extracting now".format(archiveArchiveFileName))
-                    extract(rawDataDir, archiveArchiveFileName)
-                    extract(rawDataDir, archiveFileName)
-                else:
-                    print("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
-                    downloadUnzipRadar(time)
-        if os.path.isfile(fullFileName):
-            data.append(fileToRadarFrame(time))
+        data.append(getRadarDataForTime(time))
     return data
 
 
@@ -276,6 +262,7 @@ class KeineDatenException(Exception):
 def getLabeledTimeseries(fromTime, toTime, deltaHours=1):
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
     # TODO: speichere und lade eine solche timeseries als pickle
+    # TODO: diese Funktion bietet sich an zum multithreaden
     series = getRadarData(fromTime, toTime, deltaHours)
     if len(series) == 0:
         raise KeineDatenException("Keine Radardaten zwischen {} und {}".format(fromTime, toTime))
