@@ -13,8 +13,10 @@ model = k.models.load_model(tfDataDir + modelName)
 dataIn, dataOut = getOverlappingLabeledTimeseries(41, dt.datetime(2016, 6, 12), dt.datetime(2016, 6, 13), 15, 1)
 prediction = model.predict(dataIn)
 
-print(prediction)
-
+for r, row in enumerate(prediction):
+    print("----{}----".format(r))
+    print("Pred: {}".format(row))
+    print("Act:  {}".format(dataOut[r]))
 
 
 
