@@ -43,33 +43,58 @@ model.compile(
 )
 
 
-checkpoint = k.callbacks.ModelCheckpoint(
+modelSaver = k.callbacks.ModelCheckpoint(
     tfDataDir + "simpleRadPredModel_checkpoint.h5", 
     monitor="val_loss", 
     mode="min",
     save_best_only=True
 )
 
+tensorBoard = k.callbacks.TensorBoard(
+    log_dir='./tensorBoardLogs', 
+    histogram_freq=3, 
+    batch_size=32, 
+    write_graph=True, 
+    write_grads=False, 
+    write_images=False
+)
+
+
+def createLossPlot(filePath, loss, vloss):
+    plt.plot(loss)
+    plt.plot(vloss)
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper right')
+    plt.savefig(filePath)
+
+
+class CustomPlotCallback(k.callbacks.Callback):
+    losses = []
+    vlosses = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        self.losses.append(logs["loss"])
+        self.vlosses.append(logs["val_loss"])
+        createLossPlot(tfDataDir + "/" + "loss.png", self.losses, self.vlosses)
+        
+
+customPlotCallback = CustomPlotCallback()
+
+
 
 history = model.fit_generator(
     generator=trainingGenerator,
-    steps_per_epoch=30,       # number of batches to be drawn from generator
-    epochs=30,                 # number of times the data is repeated
+    steps_per_epoch=10,       # number of batches to be drawn from generator
+    epochs=3,                 # number of times the data is repeated
     validation_data=validationGenerator,
-    validation_steps=10,       # number of batches to be drawn from generator
-    callbacks=[checkpoint]
+    validation_steps=3,       # number of batches to be drawn from generator
+    callbacks=[modelSaver, tensorBoard, customPlotCallback]
 )
 
 
 tstp = int(t.time())
 modelName = "simpleRadPredModel.h5"
 model.save(tfDataDir + tstp + "/" + modelName)
-
-
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('model loss')
-plt.ylabel('loss')
-plt.xlabel('epoch')
-plt.legend(['train', 'test'], loc='upper right')
-plt.savefig(tfDataDir + tstp + "/" + "loss.png")
+createLossPlot(tfDataDir + tstp + "/" + "loss.png", history.history['loss'], history.history['val_loss'])

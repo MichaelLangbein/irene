@@ -25,8 +25,8 @@ def extract(path, fileName):
                 with open(extractedName, "wb") as file:
                     data = zipFile.read() # get the decompressed data
                     file.write(data)
-    except tarfile.ReadError as e:
-        print("File appears corrupt. Deleting it")
+    except tarfile.ReadError:
+        print("File appears corrupt. Deleting it.")
         os.remove(fullName)
         raise IOError("File {} does not exist!".format(fullName))
 
@@ -131,7 +131,5 @@ class MyFtpServer:
         fullFile = targetDir + fileName
         self.server.cwd("/")
         with open(fullFile, "wb") as fileHandle:
-            print("Now moving to path {}".format(path))
             self.server.cwd(path)
-            print("Now saving data in {}".format(fullFile))
             self.server.retrbinary("RETR " + fileName, fileHandle.write)
