@@ -1,68 +1,39 @@
-Epoch 25/30
-Getting data from 2007-08-21 00:00:00 to 2007-08-22 11:00:00
-12/30 [===========>..................] - ETA: 40s - loss: 4.0624Getting data from 2015-09-12 00:00:00
-Keine Daten erhalten für 2015-09-12 00:00:00 bis 2015-09-13 11:00:00. Probiere es mit anderem Zeitraum
-Getting data from 2014-04-18 00:00:00 to 2014-04-19 11:00:00
-Keine Daten erhalten für 2014-04-18 00:00:00 bis 2014-04-19 11:00:00. Probiere es mit anderem Zeitraum
-Getting data from 2012-04-01 00:00:00 to 2012-04-02 11:00:00
-Keine Daten erhalten für 2012-04-01 00:00:00 bis 2012-04-02 11:00:00. Probiere es mit anderem Zeitraum
-13/30 [============>.................] - ETA: 49s - loss: 3.9576Getting data from 2015-09-01 00:00:00
-Keine Daten erhalten für 2015-09-01 00:00:00 bis 2015-09-02 11:00:00. Probiere es mit anderem Zeitraum
-14/30 [=============>................] - ETA: 55s - loss: 3.7593Traceback (most recent call last):
-  File "/home/hnd/irene/radarData.py", line 340, in getRandomBatch
-    data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-  File "/home/hnd/irene/radarData.py", line 318, in getOverlappingLabeledTimeseries
-    labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
-  File "/home/hnd/irene/radarData.py", line 273, in getLabeledTimeseries
-    series = getRadarData(fromTime, toTime, deltaHours)
-  File "/home/hnd/irene/radarData.py", line 204, in getRadarData
-    data.append(getRadarDataForTime(time))
-  File "/home/hnd/irene/radarData.py", line 168, in getRadarDataForTime
-    extract(rawDataDir, archiveFileName)
-  File "/home/hnd/irene/utils.py", line 18, in extract
-    tar.extractall(path)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/tarfile.py", line 2010, in extractall
-    numeric_owner=numeric_owner)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/tarfile.py", line 2052, in extract
-    numeric_owner=numeric_owner)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/tarfile.py", line 2122, in _extract_member
-    self.makefile(tarinfo, targetpath)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/tarfile.py", line 2171, in makefile
-    copyfileobj(source, target, tarinfo.size, ReadError, bufsize)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/tarfile.py", line 252, in copyfileobj
-    dst.write(buf)
-OSError: [Errno 28] No space left on device
+Found file RW_20070525-1350.asc
+Found file RW_20070525-1450.asc
+Found file RW_20070525-1550.asc
+Now extracting archive RW-20070525.tar.gz
+^C^CTraceback (most recent call last):
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/engine/training_generator.py", line 322, in evaluate_generator
+    generator_output = next(output_generator)
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/utils/data_utils.py", line 818, in get
+    time.sleep(self.wait_time)
+KeyboardInterrupt
 
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "simpleRadPred.py", line 60, in <module>
-    callbacks=[checkpoint]
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/site-packages/tensorflow/python/keras/engine/tra
+  File "modelTraining.py", line 93, in <module>
+    callbacks=[modelSaver, tensorBoard, customPlotCallback]
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/engine/training.py", line 1779, in fit_generator
     initial_epoch=initial_epoch)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/site-packages/tensorflow/python/keras/engine/tra
-    generator_output = next(output_generator)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/site-packages/tensorflow/python/keras/utils/data
-    six.reraise(value.__class__, value, value.__traceback__)
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/site-packages/six.py", line 693, in reraise
-    raise value
-  File "/home/hnd/miniconda3/envs/irene/lib/python3.6/site-packages/tensorflow/python/keras/utils/data
-    generator_output = next(self._generator)
-  File "/home/hnd/irene/radarData.py", line 352, in radarGenerator
-    data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
-  File "/home/hnd/irene/radarData.py", line 343, in getRandomBatch
-    data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
-  File "/home/hnd/irene/radarData.py", line 340, in getRandomBatch
-    data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-  File "/home/hnd/irene/radarData.py", line 318, in getOverlappingLabeledTimeseries
-    labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
-  File "/home/hnd/irene/radarData.py", line 273, in getLabeledTimeseries
-    series = getRadarData(fromTime, toTime, deltaHours)
-  File "/home/hnd/irene/radarData.py", line 204, in getRadarData
-    data.append(getRadarDataForTime(time))
-  File "/home/hnd/irene/radarData.py", line 164, in getRadarDataForTime
-    return fileToRadarFrame(time)
-  File "/home/hnd/irene/radarData.py", line 146, in fileToRadarFrame
-    frame = RadarFrame(date, data, [int(metaData["xllcorner"]), int(metaData["yllcorner"])], int(metaD
-UnboundLocalError: local variable 'data' referenced before assignment
-Now deleting Ftp-Server
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/engine/training_generator.py", line 225, in fit_generator
+    max_queue_size=max_queue_size)
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/engine/training_generator.py", line 356, in evaluate_generator
+    enqueuer.stop()
+  File "/home/michael/.local/lib/python3.6/site-packages/tensorflow/python/keras/utils/data_utils.py", line 785, in stop
+    thread.join(timeout)
+  File "/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py", line 1056, in join
+    self._wait_for_tstate_lock()
+  File "/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
+    elif lock.acquire(block, timeout):
+KeyboardInterrupt
+^CException ignored in: <module 'threading' from '/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py'>
+Traceback (most recent call last):
+  File "/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py", line 1294, in _shutdown
+    t.join()
+  File "/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py", line 1056, in join
+    self._wait_for_tstate_lock()
+  File "/home/michael/miniconda3/envs/tensorflow/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
+    elif lock.acquire(block, timeout):
+KeyboardInterrupt
+^C

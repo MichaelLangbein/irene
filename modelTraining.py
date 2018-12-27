@@ -86,15 +86,17 @@ customPlotCallback = CustomPlotCallback()
 
 history = model.fit_generator(
     generator=trainingGenerator,
-    steps_per_epoch=10,       # number of batches to be drawn from generator
-    epochs=3,                 # number of times the data is repeated
+    steps_per_epoch=15,       # number of batches to be drawn from generator
+    epochs=5,                 # number of times the data is repeated
     validation_data=validationGenerator,
-    validation_steps=3,       # number of batches to be drawn from generator
+    validation_steps=5,       # number of batches to be drawn from generator
     callbacks=[modelSaver, tensorBoard, customPlotCallback]
 )
 
 
 tstp = int(t.time())
-modelName = "simpleRadPredModel.h5"
-model.save(tfDataDir + tstp + "/" + modelName)
-createLossPlot(tfDataDir + tstp + "/" + "loss.png", history.history['loss'], history.history['val_loss'])
+resultDir = "{}{}".format(tfDataDir, tstp)
+if not os.path.exists(resultDir):
+    os.makedirs(resultDir)
+model.save("{}/simpleRadPredModel.h5".format(resultDir))
+createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])

@@ -1,3 +1,7 @@
 {
-    "python.pythonPath": "/home/michael/miniconda3/envs/tensorflow/bin/python"
+    "python.pythonPath": "/home/michael/miniconda3/envs/tensorflow/bin/python",
+    "files.exclude": {
+        "**/node_modules": true,
+        "**/rawData": true
+    }
 }

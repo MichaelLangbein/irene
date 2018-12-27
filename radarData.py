@@ -167,7 +167,7 @@ def getRadarDataForTime(time: dt.datetime):
             print("Now extracting archive {}".format(archiveFileName))
             extract(rawDataDir, archiveFileName)
             if not os.path.isfile(rawDataDir + fileName):
-                raise KeineDatenException("The file {} does not exist anywhere!".format(fullFileName))
+                raise KeineDatenException("The file {} does not exist anywhere!".format(fileName))
             return getRadarDataForTime(time)
         else:
             archiveArchiveFileName = getRadarFileNameMonthArchive(time)
