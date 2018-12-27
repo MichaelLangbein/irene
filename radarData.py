@@ -159,21 +159,22 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
 
 def getRadarDataForTime(time: dt.datetime):
     fileName = getRadarFileName(time)
-    fullFileName = rawDataDir + fileName
-    if os.path.isfile(fullFileName):
+    if os.path.isfile(rawDataDir + fileName):
         return fileToRadarFrame(time)
     else:
         archiveFileName = getRadarFileNameDayArchive(time)
         if os.path.isfile(rawDataDir + archiveFileName):
+            print("Now extracting archive {}".format(archiveFileName))
             extract(rawDataDir, archiveFileName)
-            if not os.path.isfile(fullFileName):
+            if not os.path.isfile(rawDataDir + fileName):
                 raise KeineDatenException("The file {} does not exist anywhere!".format(fullFileName))
             return getRadarDataForTime(time)
         else:
             archiveArchiveFileName = getRadarFileNameMonthArchive(time)
             if os.path.isfile(rawDataDir + archiveArchiveFileName):
+                print("Now extracting archive-archive {}".format(archiveArchiveFileName))
                 extract(rawDataDir, archiveArchiveFileName)
-                if not os.path.isfile(archiveFileName):
+                if not os.path.isfile(rawDataDir + archiveFileName):
                     raise KeineDatenException("The file {} does not exist anywhere!".format(archiveFileName))
                 return getRadarDataForTime(time)
             else:
@@ -182,9 +183,9 @@ def getRadarDataForTime(time: dt.datetime):
                 fullRadolanPathHistory = radolanPathHistoric + time.strftime("%Y") + "/"
                 try:
                     ftpServer.tryDownloadNTimes(fullRadolanPathHistory, fileName, rawDataDir, 2)
-                except EOFError as e:
+                except EOFError:
                     raise KeineDatenException("Cannot download file {}".format(fullRadolanPathHistory + fileName))
-                if not os.path.isfile(archiveArchiveFileName):
+                if not os.path.isfile(rawDataDir + archiveArchiveFileName):
                     raise KeineDatenException("The file {} does not exist anywhere!".format(archiveArchiveFileName))
                 return getRadarDataForTime(time)
 
@@ -338,7 +339,7 @@ def getRandomBatch(batchSize, timeSteps, imageSize):
     print("Getting data from {} to {}".format(fromTime, toTime))
     try:
         data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-    except (IOError, KeineDatenException) as e:
+    except (IOError, KeineDatenException):
         print("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
         data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
     return data, labels
