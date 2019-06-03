@@ -19,6 +19,7 @@ import datetime as dt
 import ftplib
 import tensorflow as tf
 import threading
+import h5py as h5
 
 
 
@@ -262,7 +263,7 @@ def hatExtremerStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     return (shortTerm or longTerm)
 
 
-def analyseTimestep(series: List[RadarFrame], time: dt.datetime) -> List[bool]:
+def analyzeTimestep(series: List[RadarFrame], time: dt.datetime) -> List[bool]:
     labels = []
     labels.append(hatStarkregen(series, time))
     labels.append(hatHeftigerStarkregen(series, time))
@@ -290,7 +291,7 @@ def getLabeledTimeseries(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=
     if len(series) == 0:
         raise KeineDatenException("Keine Radardaten zwischen {} und {}".format(fromTime, toTime))
     for frame in series:
-        frame.labels = analyseTimestep(series, frame.time)
+        frame.labels = analyzeTimestep(series, frame.time)
     return series
 
 
@@ -367,6 +368,99 @@ def normalizeToMaximum(series):
 #     return data, labels
 
 
+def getLabeledTimeseriesAsNp(fromTime: dt.datetime, timeSteps: int, imageSize: int, normalizer = 500) -> Tuple[np.array, np.array]:
+    toTime = fromTime + dt.timedelta(hours=timeSteps)
+    imageWidth = imageHeight = imageSize
+    dataIn = np.zeros([timeSteps, imageWidth, imageHeight, 1])
+    dataOut = np.zeros([3])
+    labeledSeries = getLabeledTimeseries(fromTime, toTime, 1)
+    cropAroundMaximum(labeledSeries, imageSize)
+    for timeNr, frame in enumerate(labeledSeries):
+        dataIn[timeNr, :, :, 0] = frame.data / normalizer
+    dataOut[:] = labeledSeries[-1].labels
+    return (dataIn, dataOut)
+
+
+def analyzeDataOffline(fileName: str, fromTime: dt.datetime, toTime: dt.datetime):
+    if os.path.isfile(fileName):
+        raise Exception("File {} already exists".format(fileName))
+
+    timeSteps = 10
+    imageSize = 81
+    with h5.File(fileName, 'w') as f:
+
+        f.attrs["fromTime"] = fromTime.timestamp()
+        f.attrs["toTime"] = toTime.timestamp()
+        f.attrs["timeSteps"] = timeSteps
+        f.attrs["imageSize"] = imageSize
+
+        frameStart = fromTime
+        frameEnd = frameStart + dt.timedelta(hours=timeSteps)
+
+        while frameEnd < toTime:
+            try:
+                tprint("analyzing {} to {}. ".format(frameStart, frameEnd))
+                dataIn, dataOut = getLabeledTimeseriesAsNp(frameStart, timeSteps, imageSize)
+                dsetIn = f.create_dataset("{}_{}_input".format(frameStart, frameEnd), data=dataIn)
+                dsetOut = f.create_dataset("{}_{}_output".format(frameStart, frameEnd), data=dataOut)
+                dsetIn.attrs["startTime"] = frameStart.timestamp()
+                dsetIn.attrs["endTime"] = frameEnd.timestamp()
+                dsetIn.attrs["type"] = "input"
+                dsetOut.attrs["startTime"] = frameStart.timestamp()
+                dsetOut.attrs["endTime"] = frameEnd.timestamp()
+                dsetOut.attrs["type"] = "output"
+            except (IOError, KeineDatenException):
+                tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
+            finally:
+                frameStart += dt.timedelta(hours=24)
+                frameEnd = frameStart + dt.timedelta(hours=timeSteps)
+
+
+
+def fileRadarGenerator(fileName: str, batchSize: int):
+    with h5.File(fileName, 'r') as f:
+
+        fromTime = dt.datetime.fromtimestamp(int(f.attrs["fromTime"]))
+        toTime = dt.datetime.fromtimestamp(int(f.attrs["toTime"]))
+        timeSteps = int(f.attrs["timeSteps"])
+        imageSize = int(f.attrs["imageSize"])
+
+        frameStart = fromTime
+        frameEnd = frameStart + dt.timedelta(hours=timeSteps)
+
+        while True:
+            imageWidth = imageHeight = imageSize
+            batchIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+            batchOut = np.zeros([batchSize, 3])
+            for batchNr in range(batchSize):
+                batchIn[batchNr, :, :, :, :] = f["{}_{}_input".format(frameStart, frameEnd)]
+                batchOut[batchNr, :] = f["{}_{}_output".format(frameStart, frameEnd)]
+                frameStart += dt.timedelta(hours=24)
+                frameEnd = frameStart + dt.timedelta(hours=timeSteps)
+                if frameEnd >= toTime: 
+                    frameStart = fromTime
+                    frameEnd = frameStart + dt.timedelta(hours=timeSteps)
+            yield (batchIn, batchOut)
+
+
+
+
+if __name__ == "__main__":
+    fromTime = dt.datetime(2017, 6, 1, 8)
+    toTime = dt.datetime(2017, 7, 28, 22)
+    fileName = "data_validation.hdf5"
+    #analyzeDataOffline(fileName, fromTime, toTime)
+    gen = fileRadarGenerator(fileName, 3)
+    i = 0
+    for (dIn, dOut) in gen: 
+        print(np.max(dIn))
+        i += 1
+        if i > 4: 
+            break
+
+
+
+
 
 def getRandomSeries(timeSteps: int) -> List[RadarFrame]:
     year = np.random.randint(2016, 2017)
@@ -408,6 +502,7 @@ def radarGenerator(batchSize, timeSteps, imageSize):
 
 
 def threadedGetRandomSeries(timeSteps, imageSize, dIn, dOut, normalizer):
+    tprint("Getting timeseries of {} steps".format(timeSteps))
     labeledSeries = getRandomSeries(timeSteps)
     cropAroundMaximum(labeledSeries, imageSize)
     for timeNr, frame in enumerate(labeledSeries):
@@ -432,6 +527,8 @@ def threadedGetRandomBatch(batchSize: int, timeSteps: int, imageSize: int, norma
     for thread in threads:
         thread.join()
 
+    tprint("joined all threads")
+
     # return 
     return (dataIn, dataOut)
 
@@ -443,12 +540,3 @@ def threadedRadarGenerator(batchSize, timeSteps, imageSize):
         yield (data, labels)
 
 
-if __name__ == "__main__":
-    gen = threadedRadarGenerator(4, 10, 81)
-    i = 0
-    for data, label in gen:
-        i += 1
-        print("iteration {}".format(i))
-        print(np.max(data))
-        if i > 10:
-            break

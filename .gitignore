@@ -3,3 +3,4 @@ config.py
 rawData/*
 npyData/*
 .vscode
+**/*.hdf5

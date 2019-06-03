@@ -13,14 +13,14 @@ import os
 thisDir = os.path.dirname(os.path.abspath(__file__))
 tfDataDir = thisDir + "/tfData/"
 
-batchSize = 20
-timeSteps = 15
+batchSize = 4
+timeSteps = 10
 imageSize = 81
 imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
-trainingGenerator = rd.threadedRadarGenerator(batchSize, timeSteps, imageSize)
-validationGenerator = rd.threadedRadarGenerator(batchSize, timeSteps, imageSize)
+trainingGenerator = rd.fileRadarGenerator("data_training.hdf5", batchSize)
+validationGenerator = rd.fileRadarGenerator("data_validation.hdf5", batchSize)
 
 
 model = k.models.Sequential([
