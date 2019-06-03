@@ -3,5 +3,8 @@
     "files.exclude": {
         "**/node_modules": true,
         "**/rawData": true
-    }
+    },
+    "python.linting.pylintEnabled": false,
+    "python.linting.mypyEnabled": true,
+    "python.linting.enabled": true
 }

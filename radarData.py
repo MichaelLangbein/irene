@@ -3,12 +3,13 @@
 # From there, data is fed into the model
 
 
-# Aktuelle Daten (Radar nur binär): https://opendata.dwd.de/weather/nwp/
+# Aktuelle Daten (Radar nur binaer): https://opendata.dwd.de/weather/nwp/
 # Historische Daten (aber keine Modellvorhersagen): ftp://ftp-cdc.dwd.de/pub/CDC/
 
 # TODO: wie umgehen mit fehlenden Daten?
 
-from utils import extract, httpDownloadFile, MyFtpServer
+from typing import List, Tuple
+from utils import extract, httpDownloadFile, MyFtpServer, tprint
 import config as conf
 import os
 import pygrib as pg
@@ -16,6 +17,8 @@ import numpy as np
 import time
 import datetime as dt
 import ftplib
+import tensorflow as tf
+import threading
 
 
 
@@ -35,6 +38,7 @@ class RadarFrame:
         self.data = data
         self.bbox = bbox
         self.pixelSize = pixelSize
+        self.labels: List = []
 
     def getMaximumWithIndex(self):
         maxX, maxY = np.unravel_index(np.argmax(self.data, axis=None), self.data.shape)
@@ -63,7 +67,7 @@ class RadarFrame:
     def cropAroundIndex(self, x, y, w):
         """ also updates metadata, so that coordinate-calculation doesn't go wrong """
         if w < 3 or w%2 != 1:
-            raise Exception("Cropping dataframe: the windows width must be uneven, so that every corner has an equal distance from the center")
+            raise Exception("Cropping dataframe: the window's width must be uneven, so that every corner has an equal distance from the center")
         X, Y = self.data.shape
         d = int((w-1)/2)
         xf = int(x - d)
@@ -116,7 +120,7 @@ def getRadarFileNameMonthArchive(date: dt.datetime):
 
 
 
-def fileToRadarFrame(date: dt.datetime):
+def fileToRadarFrame(date: dt.datetime) -> RadarFrame:
     """ reads out already donwloaded and extracted ascii file into RadarFrame """
     fullFileName = rawDataDir + getRadarFileName(date)
     with open(fullFileName, "r") as f:
@@ -157,14 +161,14 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
     return out
 
 
-def getRadarDataForTime(time: dt.datetime):
+def getRadarDataForTime(time: dt.datetime) -> RadarFrame:
     fileName = getRadarFileName(time)
     if os.path.isfile(rawDataDir + fileName):
         return fileToRadarFrame(time)
     else:
         archiveFileName = getRadarFileNameDayArchive(time)
         if os.path.isfile(rawDataDir + archiveFileName):
-            print("Now extracting archive {}".format(archiveFileName))
+            tprint("Now extracting archive {}".format(archiveFileName))
             extract(rawDataDir, archiveFileName)
             if not os.path.isfile(rawDataDir + fileName):
                 raise KeineDatenException("The file {} does not exist anywhere!".format(fileName))
@@ -172,25 +176,28 @@ def getRadarDataForTime(time: dt.datetime):
         else:
             archiveArchiveFileName = getRadarFileNameMonthArchive(time)
             if os.path.isfile(rawDataDir + archiveArchiveFileName):
-                print("Now extracting archive-archive {}".format(archiveArchiveFileName))
+                tprint("Now extracting archive-archive {}".format(archiveArchiveFileName))
                 extract(rawDataDir, archiveArchiveFileName)
                 if not os.path.isfile(rawDataDir + archiveFileName):
                     raise KeineDatenException("The file {} does not exist anywhere!".format(archiveFileName))
                 return getRadarDataForTime(time)
             else:
-                print("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
+                tprint("Could not find {}, {} or {} locally, trying to download file".format(fileName, archiveFileName, archiveArchiveFileName))
                 fileName = getRadarFileNameMonthArchive(time)
                 fullRadolanPathHistory = radolanPathHistoric + time.strftime("%Y") + "/"
                 try:
                     ftpServer.tryDownloadNTimes(fullRadolanPathHistory, fileName, rawDataDir, 2)
                 except EOFError:
                     raise KeineDatenException("Cannot download file {}".format(fullRadolanPathHistory + fileName))
+                except ftplib.error_temp as e:
+                    tprint("An ftp-error has occured: {}".format(e))
+                    raise KeineDatenException("Cannot download file {}".format(fullRadolanPathHistory + fileName))
                 if not os.path.isfile(rawDataDir + archiveArchiveFileName):
                     raise KeineDatenException("The file {} does not exist anywhere!".format(archiveArchiveFileName))
                 return getRadarDataForTime(time)
 
 
-def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
+def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1) -> List[RadarFrame]:
     """
     >>> data = getRadarData(dt.datetime(2018, 10, 14, 0, 50), dt.datetime(2018, 10, 15, 0, 0))
     >>> for time in data:
@@ -207,7 +214,7 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1):
 
 
 
-def hatStarkregen(series, time: dt.datetime):
+def hatStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     """
     Starkregen	
     15 bis 25 l/m² in 1 Stunde
@@ -224,7 +231,7 @@ def hatStarkregen(series, time: dt.datetime):
 
 
 
-def hatHeftigerStarkregen(series, time: dt.datetime):
+def hatHeftigerStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     """
     25 bis 40 l/m² in 1 Stunde
     35 bis 60 l/m² in 6 Stunden
@@ -240,7 +247,7 @@ def hatHeftigerStarkregen(series, time: dt.datetime):
 
 
 
-def hatExtremerStarkregen(series, time: dt.datetime):
+def hatExtremerStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     """
     > 40 l/m² in 1 Stunde
     > 60 l/m² in 6 Stunden
@@ -255,7 +262,7 @@ def hatExtremerStarkregen(series, time: dt.datetime):
     return (shortTerm or longTerm)
 
 
-def analyseTimestep(series, time: dt.datetime):
+def analyseTimestep(series: List[RadarFrame], time: dt.datetime) -> List[bool]:
     labels = []
     labels.append(hatStarkregen(series, time))
     labels.append(hatHeftigerStarkregen(series, time))
@@ -263,11 +270,19 @@ def analyseTimestep(series, time: dt.datetime):
     return labels
 
 
+def translateLabels(labels: List[bool]) -> List[str]:
+    strLabels = []
+    strLabels.append( "Starkregen" if labels[0] else "" )
+    strLabels.append( "Heftiger Starkregen" if labels[1] else "" )
+    strLabels.append( "Extremer Starkregen" if labels[2] else "" )
+    return strLabels
+
+
 class KeineDatenException(Exception):
     pass
 
 
-def getLabeledTimeseries(fromTime, toTime, deltaHours=1):
+def getLabeledTimeseries(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1) -> List[RadarFrame]:
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
     # TODO: speichere und lade eine solche timeseries als pickle
     # TODO: diese Funktion bietet sich an zum multithreaden
@@ -282,8 +297,8 @@ def getLabeledTimeseries(fromTime, toTime, deltaHours=1):
 
 def cropAroundMaximum(series, size):
     """ 
-    findet position des maximums einer serie von RadarFrames.
-    schneidet aus jedem frame ein fenster um dieses maximum herum aus.
+    Findet position des Maximums einer Serie von RadarFrames.
+    Schneidet aus jedem frame ein Fenster um dieses Maximum herum aus.
     """
     maximum = 0.0
     maxX = 0
@@ -309,41 +324,78 @@ def normalizeToMaximum(series):
     pass
 
 
-def getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps = 10, deltaHours = 1):
-    """ 
-     - lädt eine labeled timeseries
-     - formattiert sie so, dass für keras brauchbar
-     - crop'en der Daten, so dass nur interessante events zu sehen
-     - TODO: Normalisieren der Daten 
-    """
-    labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
+# def getOverlappingLabeledTimeseries(imageSize: int, fromTime, toTime, timeSteps = 10, deltaHours = 1, normalisationValue = 400) -> Tuple[np.array, np.array]:
+#     """ 
+#      - lädt eine labeled timeseries
+#      - formattiert sie so, dass für keras brauchbar
+#      - crop'en der Daten, so dass nur interessante events zu sehen
+#      - TODO: Normalisieren der Daten 
+#     """
+
+
+#     labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
+#     imageWidth = imageHeight = imageSize
+#     batchSize = len(labeledSeries) - timeSteps
+#     dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+#     dataOut = np.zeros([batchSize, 3])
+
+#     for frame in labeledSeries: 
+#         frame.data = frame.data / normalisationValue
+
+#     for batchNr in range(batchSize):
+#         subSeries = labeledSeries[batchNr:batchNr+timeSteps]
+#         cropAroundMaximum(subSeries, imageSize)
+#         for timeNr, frame in enumerate(subSeries):
+#             dataIn[batchNr, timeNr, :, :, 0] = frame.data
+#         dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps].labels
+
+#     return (dataIn, dataOut)
+        
+
+# def getRandomOverlappingBatch(batchSize, timeSteps, imageSize):
+#     year = np.random.randint(2006, 2017)   
+#     month = np.random.randint(4, 11)
+#     day = np.random.randint(1, 27)
+#     fromTime = dt.datetime(year, month, day)
+#     toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
+#    tprint("Getting data from {} to {}".format(fromTime, toTime))
+#     try:
+#         data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
+#     except (IOError, KeineDatenException):
+#        tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
+#         data, labels = getRandomOverlappingBatch(batchSize, timeSteps, imageSize)
+#     return data, labels
+
+
+
+def getRandomSeries(timeSteps: int) -> List[RadarFrame]:
+    year = np.random.randint(2016, 2017)
+    month = np.random.randint(4, 11)
+    day = np.random.randint(1, 27)
+    earliest = max(8 - timeSteps, 0)
+    latest = 24
+    hour = np.random.randint(earliest, latest)
+    fromTime = dt.datetime(year, month, day, hour)
+    toTime = fromTime + dt.timedelta(hours=(timeSteps))
+    try:
+        labeledSeries = getLabeledTimeseries(fromTime, toTime, 1)
+    except (IOError, KeineDatenException):
+        tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
+        labeledSeries = getRandomSeries(timeSteps)
+    return labeledSeries
+
+
+def getRandomBatch(batchSize: int, timeSteps: int, imageSize: int, normalizer = 400) -> Tuple[np.array, np.array]:
     imageWidth = imageHeight = imageSize
-    batchSize = len(labeledSeries) - timeSteps
     dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
     dataOut = np.zeros([batchSize, 3])
     for batchNr in range(batchSize):
-        subSeries = labeledSeries[batchNr:batchNr+timeSteps]
-        cropAroundMaximum(subSeries, imageSize)
-        for timeNr, frame in enumerate(subSeries):
-            dataIn[batchNr, timeNr, :, :, 0] = frame.data
-        dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps].labels
+        labeledSeries = getRandomSeries(timeSteps)
+        cropAroundMaximum(labeledSeries, imageSize)
+        for timeNr, frame in enumerate(labeledSeries):
+            dataIn[batchNr, timeNr, :, :, 0] = frame.data / normalizer
+        dataOut[batchNr, :] = labeledSeries[-1].labels
     return (dataIn, dataOut)
-        
-
-def getRandomBatch(batchSize, timeSteps, imageSize):
-    year = np.random.randint(2006, 2017)   
-    month = np.random.randint(4, 11)
-    day = np.random.randint(1, 27)
-    fromTime = dt.datetime(year, month, day)
-    toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
-    print("Getting data from {} to {}".format(fromTime, toTime))
-    try:
-        data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-    except (IOError, KeineDatenException):
-        print("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
-        data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
-    return data, labels
-
 
 
 def radarGenerator(batchSize, timeSteps, imageSize):
@@ -355,3 +407,48 @@ def radarGenerator(batchSize, timeSteps, imageSize):
             
 
 
+def threadedGetRandomSeries(timeSteps, imageSize, dIn, dOut, normalizer):
+    labeledSeries = getRandomSeries(timeSteps)
+    cropAroundMaximum(labeledSeries, imageSize)
+    for timeNr, frame in enumerate(labeledSeries):
+        dIn[timeNr, :, :, 0] = frame.data / normalizer
+    dOut[:] = labeledSeries[-1].labels
+
+
+def threadedGetRandomBatch(batchSize: int, timeSteps: int, imageSize: int, normalizer = 400) -> Tuple[np.array, np.array]:
+    # allocating memory
+    imageWidth = imageHeight = imageSize
+    dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
+    dataOut = np.zeros([batchSize, 3])
+
+    # setting up threads
+    threads = []
+    for batchNr in range(batchSize):
+        thread = threading.Thread(target=threadedGetRandomSeries, args=(timeSteps, imageSize, dataIn[batchNr], dataOut[batchNr], normalizer))
+        threads.append(thread)
+        thread.start()
+    
+    # joining threads
+    for thread in threads:
+        thread.join()
+
+    # return 
+    return (dataIn, dataOut)
+
+def threadedRadarGenerator(batchSize, timeSteps, imageSize):
+    if imageSize < 3 or imageSize%2 != 1:
+        raise Exception("Image size must be uneven, so that maximum is centered!")
+    while True:
+        data, labels = threadedGetRandomBatch(batchSize, timeSteps, imageSize)
+        yield (data, labels)
+
+
+if __name__ == "__main__":
+    gen = threadedRadarGenerator(4, 10, 81)
+    i = 0
+    for data, label in gen:
+        i += 1
+        print("iteration {}".format(i))
+        print(np.max(data))
+        if i > 10:
+            break

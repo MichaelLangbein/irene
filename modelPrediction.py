@@ -2,6 +2,7 @@ import os
 import tensorflow.keras as k
 import datetime as dt
 from radarData import getOverlappingLabeledTimeseries
+from plotting import movie
 
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +18,4 @@ for r, row in enumerate(prediction):
     print("----{}----".format(r))
     print("Pred: {}".format(row))
     print("Act:  {}".format(dataOut[r]))
-
-
-
+    movie(dataIn[r], dataOut[r])

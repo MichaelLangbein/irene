@@ -15,12 +15,12 @@ tfDataDir = thisDir + "/tfData/"
 
 batchSize = 20
 timeSteps = 15
-imageSize = 41
+imageSize = 81
 imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
-trainingGenerator = rd.radarGenerator(batchSize, timeSteps, imageSize)
-validationGenerator = rd.radarGenerator(batchSize, timeSteps, imageSize)
+trainingGenerator = rd.threadedRadarGenerator(batchSize, timeSteps, imageSize)
+validationGenerator = rd.threadedRadarGenerator(batchSize, timeSteps, imageSize)
 
 
 model = k.models.Sequential([
@@ -39,7 +39,7 @@ model = k.models.Sequential([
 
 model.compile(
     optimizer=k.optimizers.Adam(),
-    loss=k.losses.mean_squared_error
+    loss=k.losses.binary_crossentropy
 )
 
 
@@ -86,11 +86,11 @@ customPlotCallback = CustomPlotCallback()
 
 history = model.fit_generator(
     generator=trainingGenerator,
-    steps_per_epoch=15,       # number of batches to be drawn from generator
-    epochs=5,                 # number of times the data is repeated
+    steps_per_epoch=25,       # number of batches to be drawn from generator
+    epochs=10,                 # number of times the data is repeated
     validation_data=validationGenerator,
     validation_steps=5,       # number of batches to be drawn from generator
-    callbacks=[modelSaver, tensorBoard, customPlotCallback]
+    callbacks=[modelSaver, tensorBoard, customPlotCallback] 
 )
 
 

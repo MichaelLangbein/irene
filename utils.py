@@ -6,6 +6,12 @@ from time import sleep
 import urllib.request
 from ftplib import FTP
 import ftplib
+import threading as thr
+
+
+def tprint(text: str):
+    threadId = thr.get_ident()
+    print("\nthread {}: {}".format(threadId, text))
 
 
 def extract(path, fileName):
@@ -26,7 +32,7 @@ def extract(path, fileName):
                     data = zipFile.read() # get the decompressed data
                     file.write(data)
     except tarfile.ReadError:
-        print("File appears corrupt. Deleting it.")
+        tprint("File appears corrupt. Deleting it.")
         os.remove(fullName)
         raise IOError("File {} does not exist!".format(fullName))
 
@@ -38,10 +44,10 @@ def httpDownloadFile(serverName, path, fileName, targetDir):
     """
     fullUrl = serverName + path + fileName
     fullFile = targetDir + fileName
-    print("Now attempting connection to {}".format(fullUrl))
+    tprint("Now attempting connection to {}".format(fullUrl))
     with urllib.request.urlopen(fullUrl) as response:
         with open(fullFile, "wb") as fileHandle:
-            print("Now saving data in {}".format(fullFile))
+            tprint("Now saving data in {}".format(fullFile))
             data = response.read()  # a bytes-object
             fileHandle.write(data)
 
@@ -52,13 +58,13 @@ def ftpDownloadFile(serverName, path, fileName, targetDir):
     >>> ftpDownloadFile(dwdFtpServer, radolanPath, "RW-20180101.tar.gz", rawDataDir)
     """
     fullFile = targetDir + fileName
-    print("Now attempting connection to {}".format(serverName))
+    tprint("Now attempting connection to {}".format(serverName))
     with FTP(serverName) as ftp:
         with open(fullFile, "wb") as fileHandle:
             ftp.login()
-            print("Now moving to path {}".format(path))
+            tprint("Now moving to path {}".format(path))
             ftp.cwd(path)
-            print("Now saving data in {}".format(fullFile))
+            tprint("Now saving data in {}".format(fullFile))
             ftp.retrbinary("RETR " + fileName, fileHandle.write)
 
 
@@ -80,7 +86,7 @@ class MyFtpServer:
             self.connect(self.serverName, self.user, self.passwd, self.proxy)
         except EOFError as e:
             if n > 0:
-                print("Connection error; retrying ...")
+                tprint("Connection error; retrying ...")
                 self.tryConnectNTimes(n-1)
             else: 
                 raise e
@@ -90,20 +96,20 @@ class MyFtpServer:
         if not user:
             user = "anonymous"
         if not proxy:
-            print("Now connecting to {}@{} using {}".format(user, serverName, passwd))
+            tprint("Now connecting to {}@{} using {}".format(user, serverName, passwd))
             self.server = FTP(serverName)
             self.server.login(user, passwd)
         else:
             userString = "{}@{}".format(user, serverName)
-            print("Now connecting to {}@{} using {}".format(userString, proxy, passwd))
+            tprint("Now connecting to {}@{} using {}".format(userString, proxy, passwd))
             self.server = FTP(proxy)
             self.server.login(userString, passwd)
-        print("Connection established.")
+        tprint("Connection established.")
         return True
 
 
     def __del__(self):
-        print("Now deleting Ftp-Server")
+        tprint("Now deleting Ftp-Server")
         #if self.server:
         #    self.server.quit()
 
@@ -112,16 +118,20 @@ class MyFtpServer:
             self.downloadFile(path, fileName, targetDir)
         except EOFError as e:
             if n > 0:
-                print("Download error {}; retrying ...".format(str(e)))
+                tprint("Download error {}; retrying ...".format(str(e)))
                 self.tryDownloadNTimes(path, fileName, targetDir, n-1)
             else:
                 raise e
         except BrokenPipeError as e:
-            print("Broken pipe {}. Trying to reconnect ...".format(str(e)))
+            tprint("Broken pipe {}. Trying to reconnect ...".format(str(e)))
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)
         except ftplib.error_reply as e:
-            print("Reply-problem {}. Trying again ...".format(str(e)))
+            tprint("Reply-problem {}. Trying again ...".format(str(e)))
+            self.tryConnectNTimes(2)
+            self.tryDownloadNTimes(path, fileName, targetDir, n)
+        except tfplib.error_temp as e: 
+            tprint("Connection closed because idle. Reconnecting ...".format(str(e)))
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)
             
