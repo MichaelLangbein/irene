@@ -381,12 +381,10 @@ def getLabeledTimeseriesAsNp(fromTime: dt.datetime, timeSteps: int, imageSize: i
     return (dataIn, dataOut)
 
 
-def analyzeDataOffline(fileName: str, fromTime: dt.datetime, toTime: dt.datetime):
+def analyzeDataOffline(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, timeSteps: int, imageSize: int):
     if os.path.isfile(fileName):
         raise Exception("File {} already exists".format(fileName))
 
-    timeSteps = 10
-    imageSize = 81
     with h5.File(fileName, 'w') as f:
 
         f.attrs["fromTime"] = fromTime.timestamp()

@@ -3,4 +3,5 @@ config.py
 rawData/*
 npyData/*
 .vscode
+.mypy_cache
 **/*.hdf5

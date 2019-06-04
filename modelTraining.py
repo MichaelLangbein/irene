@@ -5,6 +5,7 @@
 import numpy as np
 import tensorflow.keras as k
 import radarData as rd
+import datetime as dt
 import time as t
 import matplotlib.pyplot as plt
 import os
@@ -14,17 +15,21 @@ thisDir = os.path.dirname(os.path.abspath(__file__))
 tfDataDir = thisDir + "/tfData/"
 
 batchSize = 4
-timeSteps = 10
+timeSteps = 15
 imageSize = 81
 imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
-trainingGenerator = rd.fileRadarGenerator("data_training.hdf5", batchSize)
-validationGenerator = rd.fileRadarGenerator("data_validation.hdf5", batchSize)
+
+rd.analyzeDataOffline("processedData/training_data.hdf5", dt.datetime(2016, 4, 1, 8), dt.datetime(2016, 10, 30, 22), timeSteps, imageSize)
+rd.analyzeDataOffline("processedData/validation_data.hdf5", dt.datetime(2017, 6, 1, 8), dt.datetime(2017, 8, 30, 22), timeSteps, imageSize)
+
+trainingGenerator = rd.fileRadarGenerator("processedData/training_data.hdf5", batchSize)
+validationGenerator = rd.fileRadarGenerator("processedData/validation_data.hdf5", batchSize)
 
 
 model = k.models.Sequential([
-    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, 1), name="conv1"),
+    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
     k.layers.MaxPool3D(),
     k.layers.Conv3D(5, (2,2,2), name="conv2"),
     k.layers.MaxPool3D(),
