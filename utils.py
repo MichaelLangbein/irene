@@ -130,7 +130,7 @@ class MyFtpServer:
             tprint("Reply-problem {}. Trying again ...".format(str(e)))
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)
-        except tfplib.error_temp as e: 
+        except ftplib.error_temp as e: 
             tprint("Connection closed because idle. Reconnecting ...".format(str(e)))
             self.tryConnectNTimes(2)
             self.tryDownloadNTimes(path, fileName, targetDir, n)

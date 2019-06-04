@@ -34,39 +34,63 @@ ftpServer = MyFtpServer(conf.dwdFtpServerName, conf.dwdFtpServerUser, conf.dwdFt
 
 
 class RadarFrame:
-    def __init__(self, time: dt.datetime, data: np.array, bbox: list, pixelSize):
+    def __init__(self, time: dt.datetime, data: np.array, lowerLeft: list, pixelSize: float):
         self.time = time
         self.data = data
-        self.bbox = bbox
+        self.lowerLeft = lowerLeft
         self.pixelSize = pixelSize
         self.labels: List = []
 
-    def getMaximumWithIndex(self):
+    def getMaximumWithIndex(self) -> Tuple[int, int, int]:
         maxX, maxY = np.unravel_index(np.argmax(self.data, axis=None), self.data.shape)
         maxV = self.data[maxX, maxY]
         return (maxV, maxX, maxY)
 
-    def getMaximumWithCoords(self):
+    def getMaximumWithCoords(self) -> Tuple[int, float, float]:
         maxV, maxX, maxY = self.getMaximumWithIndex()
         maxXC, maxYC = self.getCoordsOfIndex(maxX, maxY)
         return (maxV, maxXC, maxYC)
 
-    def getCoordsOfIndex(self, x, y):
-        cX0 = self.bbox[0]
-        cY0 = self.bbox[1]
+    def getCoordsOfIndex(self, x, y) -> Tuple[float, float]:
+        cX0 = self.lowerLeft[0]
+        cY0 = self.lowerLeft[1]
         cX = cX0 + self.pixelSize * x
         cY = cY0 + self.pixelSize * y
         return (cX, cY)
 
-    def getIndexOfCoords(self, cX, cY):
-        cX0 = self.bbox[0]
-        cY0 = self.bbox[1]
+    def getIndexOfCoords(self, cX, cY) -> Tuple[int, int]:
+        cX0 = self.lowerLeft[0]
+        cY0 = self.lowerLeft[1]
         x = (cX - cX0) / self.pixelSize
         y = (cY - cY0) / self.pixelSize
         return (x, y)
+
+    def getCoordsOfCenter(self) -> Tuple[float, float]:
+        X, Y = self.data.shape
+        xCenter = int(X / 2)
+        yCenter = int(Y / 2)
+        return this.getCoordsOfIndex(xCenter, yCenter)
+
+    def containsCoords(self, cX: float, xY: float) -> bool:
+        x, y = self.getIndexOfCoords(cX, xY)
+        xMax, yMax = self.data.shape
+        return (x < xMax) and (y < yMax)
     
-    def cropAroundIndex(self, x, y, w):
+    def cropAroundIndex(self, x, y, w) -> RadarFrame:
         """ also updates metadata, so that coordinate-calculation doesn't go wrong """
+        xf, xt, yf, yt = self.getIndicesAroundIndex(x, y, w)
+
+        xLL, yLL = self.getCoordsOfIndex(xf, yf)
+        newData = self.data[xf:xt, yf:yt]
+
+        newFrame = RadarFrame(self.time, newData, [xLL, yLL], self.pixelSize)
+        return newFrame
+    
+    def cropAroundCoords(self, cX, cY, w) -> RadarFrame:
+        x, y = self.getIndexOfCoords(cX, cY)
+        return self.cropAroundIndex(x, y, w)
+
+    def getIndicesAroundIndex(self, x: int, y: int, w: int) -> Tuple[int, int, int, int]:
         if w < 3 or w%2 != 1:
             raise Exception("Cropping dataframe: the window's width must be uneven, so that every corner has an equal distance from the center")
         X, Y = self.data.shape
@@ -91,15 +115,12 @@ class RadarFrame:
         if distToBot < 0:
             yf -= abs(distToBot)
             yt -= abs(distToBot)
-        newBbox = self.getCoordsOfIndex(xf, yf)
-        self.bbox = newBbox
-        newData = self.data[xf:xt, yf:yt]
-        self.data = newData
-        
+        return (xf, xt, yf, yt)
 
-    def cropAroundCoords(self, cX, cY, w):
+    def getIndicesAroundCoords(self, cX: float, cY: float, W: float) -> Tuple[int, int, int, int]:
         x, y = self.getIndexOfCoords(cX, cY)
-        self.cropAroundIndex(x, y, w)
+        w = int(W / self.pixelSize)
+        return self.getIndicesAroundIndex(x, y, w)
 
 
 
@@ -285,8 +306,7 @@ class KeineDatenException(Exception):
 
 def getLabeledTimeseries(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1) -> List[RadarFrame]:
     """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
-    # TODO: speichere und lade eine solche timeseries als pickle
-    # TODO: diese Funktion bietet sich an zum multithreaden
+    # TODO: 
     series = getRadarData(fromTime, toTime, deltaHours)
     if len(series) == 0:
         raise KeineDatenException("Keine Radardaten zwischen {} und {}".format(fromTime, toTime))
@@ -296,15 +316,16 @@ def getLabeledTimeseries(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=
 
 
 
-def cropAroundMaximum(series, size):
+def cropAroundMaximum(series: List[RadarFrame], size) -> List[RadarFrame]:
     """ 
     Findet position des Maximums einer Serie von RadarFrames.
     Schneidet aus jedem frame ein Fenster um dieses Maximum herum aus.
     """
     maximum = 0.0
-    maxX = 0
-    maxY = 0
-    maxT = 0
+    maxX = 0.0
+    maxY = 0.0
+    maxT = 0.0
+    newFrames = []
     for timeStep, frame in enumerate(series):
         (localMax, localMaxX, localMaxY) = frame.getMaximumWithCoords()
         if localMax > maximum:
@@ -313,59 +334,66 @@ def cropAroundMaximum(series, size):
             maxY = localMaxY
             maxT = timeStep
     for frame in series:
-        frame.cropAroundCoords(maxX, maxY, size)
+        newFrame = frame.cropAroundCoords(maxX, maxY, size)
+        newFrames.append(newFrame)
+    return newFrames
 
 
 
-def normalizeToMaximum(series):
-    """
-    findet maximum einer serie von RadarFrames.
-    normalisiert ganze serie zu diesem maximum.
-    """
-    pass
+class Storm(): 
+
+    def __init__(self, frames: List[RadarFrame]):
+        self.frames: List[RadarFrame] = frames
+
+    def contains(self, cX: float, cY: float) -> bool: 
+        for frame in self.frames:
+            if frame.containsCoords(cX, cY):
+                return True
+        return False
+
+    def fitsInTime(self, time: dt.datetime) -> bool:
+        deltaT = dt.timedelta(hours=1)
+        for frame in self.frames: 
+            if frame.time == (time + deltaT) or frame.time == (time - deltaT):
+                return True
+        return False
+
+    def fitsIn(self, frame: RadarFrame) -> bool:
+        cX, cY = frame.getCoordsOfCenter()
+        time = frame.time
+        return self.contains(cX, cY) and self.fitsInTime(time)
+
+    def addFrame(self, frame: RadarFrame):
+        if self.fitsIn(frame):
+            self.frames.append(frame)
+
+    
 
 
-# def getOverlappingLabeledTimeseries(imageSize: int, fromTime, toTime, timeSteps = 10, deltaHours = 1, normalisationValue = 400) -> Tuple[np.array, np.array]:
-#     """ 
-#      - lädt eine labeled timeseries
-#      - formattiert sie so, dass für keras brauchbar
-#      - crop'en der Daten, so dass nur interessante events zu sehen
-#      - TODO: Normalisieren der Daten 
-#     """
+def getStorms(fromTime: dt.datetime, toTime: dt.datetime, timeSteps: int, imageSize: int, normalizer = 500, threshold = 50) -> List[Storm]:
+    
+    radarData = getRadarData(fromTime, toTime)
+    storms: List[Storm] = []
 
+    for frame in radarData: 
+        maxval, x, y = frame.getMaximumWithIndex()
+        while maxval > threshold: 
 
-#     labeledSeries = getLabeledTimeseries(fromTime, toTime, deltaHours)
-#     imageWidth = imageHeight = imageSize
-#     batchSize = len(labeledSeries) - timeSteps
-#     dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-#     dataOut = np.zeros([batchSize, 3])
+            cX, cY = frame.getCoordsOfIndex(x, y)
+            croppedFrame = frame.cropAroundCoords(cX, cY, imageSize)
+            
+            matchingStorms = [storm for storm in storms if storm.fitsIn(croppedFrame)]
+            for storm in matchingStorms: 
+                storm.addFrame(croppedFrame)
+            if not matchingStorms:
+                storms.append(Storm([croppedFrame]))
+            
+            xf, xt, yf, yt = frame.getIndicesAroundIndex(x, y, imageSize)
+            frame.data[xf:xt, yf:yt] = np.zeros((imageSize, imageSize))
+            maxval, x, y = frame.getMaximumWithIndex()
+            
+    return storms
 
-#     for frame in labeledSeries: 
-#         frame.data = frame.data / normalisationValue
-
-#     for batchNr in range(batchSize):
-#         subSeries = labeledSeries[batchNr:batchNr+timeSteps]
-#         cropAroundMaximum(subSeries, imageSize)
-#         for timeNr, frame in enumerate(subSeries):
-#             dataIn[batchNr, timeNr, :, :, 0] = frame.data
-#         dataOut[batchNr, :] = labeledSeries[batchNr + timeSteps].labels
-
-#     return (dataIn, dataOut)
-        
-
-# def getRandomOverlappingBatch(batchSize, timeSteps, imageSize):
-#     year = np.random.randint(2006, 2017)   
-#     month = np.random.randint(4, 11)
-#     day = np.random.randint(1, 27)
-#     fromTime = dt.datetime(year, month, day)
-#     toTime = fromTime + dt.timedelta(hours=(timeSteps + batchSize))
-#    tprint("Getting data from {} to {}".format(fromTime, toTime))
-#     try:
-#         data, labels = getOverlappingLabeledTimeseries(imageSize, fromTime, toTime, timeSteps)
-#     except (IOError, KeineDatenException):
-#        tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
-#         data, labels = getRandomOverlappingBatch(batchSize, timeSteps, imageSize)
-#     return data, labels
 
 
 def getLabeledTimeseriesAsNp(fromTime: dt.datetime, timeSteps: int, imageSize: int, normalizer = 500) -> Tuple[np.array, np.array]:
@@ -446,95 +474,8 @@ def fileRadarGenerator(fileName: str, batchSize: int):
 if __name__ == "__main__":
     fromTime = dt.datetime(2017, 6, 1, 8)
     toTime = dt.datetime(2017, 7, 28, 22)
-    fileName = "data_validation.hdf5"
-    #analyzeDataOffline(fileName, fromTime, toTime)
-    gen = fileRadarGenerator(fileName, 3)
-    i = 0
-    for (dIn, dOut) in gen: 
-        print(np.max(dIn))
-        i += 1
-        if i > 4: 
-            break
-
-
-
-
-
-def getRandomSeries(timeSteps: int) -> List[RadarFrame]:
-    year = np.random.randint(2016, 2017)
-    month = np.random.randint(4, 11)
-    day = np.random.randint(1, 27)
-    earliest = max(8 - timeSteps, 0)
-    latest = 24
-    hour = np.random.randint(earliest, latest)
-    fromTime = dt.datetime(year, month, day, hour)
-    toTime = fromTime + dt.timedelta(hours=(timeSteps))
-    try:
-        labeledSeries = getLabeledTimeseries(fromTime, toTime, 1)
-    except (IOError, KeineDatenException):
-        tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
-        labeledSeries = getRandomSeries(timeSteps)
-    return labeledSeries
-
-
-def getRandomBatch(batchSize: int, timeSteps: int, imageSize: int, normalizer = 400) -> Tuple[np.array, np.array]:
-    imageWidth = imageHeight = imageSize
-    dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-    dataOut = np.zeros([batchSize, 3])
-    for batchNr in range(batchSize):
-        labeledSeries = getRandomSeries(timeSteps)
-        cropAroundMaximum(labeledSeries, imageSize)
-        for timeNr, frame in enumerate(labeledSeries):
-            dataIn[batchNr, timeNr, :, :, 0] = frame.data / normalizer
-        dataOut[batchNr, :] = labeledSeries[-1].labels
-    return (dataIn, dataOut)
-
-
-def radarGenerator(batchSize, timeSteps, imageSize):
-    if imageSize < 3 or imageSize%2 != 1:
-        raise Exception("Image size must be uneven, so that maximum is centered!")
-    while True:
-        data, labels = getRandomBatch(batchSize, timeSteps, imageSize)
-        yield (data, labels)
-            
-
-
-def threadedGetRandomSeries(timeSteps, imageSize, dIn, dOut, normalizer):
-    tprint("Getting timeseries of {} steps".format(timeSteps))
-    labeledSeries = getRandomSeries(timeSteps)
-    cropAroundMaximum(labeledSeries, imageSize)
-    for timeNr, frame in enumerate(labeledSeries):
-        dIn[timeNr, :, :, 0] = frame.data / normalizer
-    dOut[:] = labeledSeries[-1].labels
-
-
-def threadedGetRandomBatch(batchSize: int, timeSteps: int, imageSize: int, normalizer = 400) -> Tuple[np.array, np.array]:
-    # allocating memory
-    imageWidth = imageHeight = imageSize
-    dataIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-    dataOut = np.zeros([batchSize, 3])
-
-    # setting up threads
-    threads = []
-    for batchNr in range(batchSize):
-        thread = threading.Thread(target=threadedGetRandomSeries, args=(timeSteps, imageSize, dataIn[batchNr], dataOut[batchNr], normalizer))
-        threads.append(thread)
-        thread.start()
-    
-    # joining threads
-    for thread in threads:
-        thread.join()
-
-    tprint("joined all threads")
-
-    # return 
-    return (dataIn, dataOut)
-
-def threadedRadarGenerator(batchSize, timeSteps, imageSize):
-    if imageSize < 3 or imageSize%2 != 1:
-        raise Exception("Image size must be uneven, so that maximum is centered!")
-    while True:
-        data, labels = threadedGetRandomBatch(batchSize, timeSteps, imageSize)
-        yield (data, labels)
+    timeSteps = 15
+    imageSize = 81
+    getStorms(fromTime, toTime, timeSteps, imageSize)
 
 
