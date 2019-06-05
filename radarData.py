@@ -13,7 +13,6 @@ import collections as c
 from utils import extract, httpDownloadFile, MyFtpServer, tprint
 import config as conf
 import os
-import pygrib as pg
 import numpy as np
 import time
 import datetime as dt
@@ -21,7 +20,7 @@ import ftplib
 import tensorflow as tf
 import threading
 import h5py as h5
-
+import plotting as pl
 
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
@@ -82,7 +81,7 @@ class RadarFrame:
         xf, xt, yf, yt = self.getIndicesAroundIndex(x, y, w)
 
         xLL, yLL = self.getCoordsOfIndex(xf, yf)
-        newData = self.data[xf:xt, yf:yt]
+        newData = np.copy(self.data[xf:xt, yf:yt])
 
         newFrame = RadarFrame(self.time, newData, [xLL, yLL], self.pixelSize)
         return newFrame
@@ -186,7 +185,6 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
 
 def getRadarDataForTime(time: dt.datetime) -> RadarFrame:
     fileName = getRadarFileName(time)
-    tprint("Looking for file " + fileName)
     if os.path.isfile(rawDataDir + fileName):
         return fileToRadarFrame(time)
     else:
@@ -299,46 +297,11 @@ class KeineDatenException(Exception):
     pass
 
 
-def getLabeledTimeseries(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1) -> List[RadarFrame]:
-    """ fügt zu einer bestehenden zeitreihe noch labels hinzu """
-    # TODO: 
-    series = getRadarData(fromTime, toTime, deltaHours)
-    if len(series) == 0:
-        raise KeineDatenException("Keine Radardaten zwischen {} und {}".format(fromTime, toTime))
-    for frame in series:
-        frame.labels = analyzeTimestep(series, frame.time)
-    return series
-
-
-
-def cropAroundMaximum(series: List[RadarFrame], size) -> List[RadarFrame]:
-    """ 
-    Findet position des Maximums einer Serie von RadarFrames.
-    Schneidet aus jedem frame ein Fenster um dieses Maximum herum aus.
-    """
-    maximum = 0.0
-    maxX = 0.0
-    maxY = 0.0
-    maxT = 0.0
-    newFrames = []
-    for timeStep, frame in enumerate(series):
-        (localMax, localMaxX, localMaxY) = frame.getMaximumWithCoords()
-        if localMax > maximum:
-            maximum = localMax
-            maxX = localMaxX
-            maxY = localMaxY
-            maxT = timeStep
-    for frame in series:
-        newFrame = frame.cropAroundCoords(maxX, maxY, size)
-        newFrames.append(newFrame)
-    return newFrames
-
-
-
 class Storm(): 
 
     def __init__(self, frames: List[RadarFrame]):
         self.frames = frames
+        self.frames.sort(key = lambda i: i.time)
 
     def contains(self, cX: float, cY: float) -> bool: 
         if self.frames[0].containsCoords(cX, cY):
@@ -378,12 +341,15 @@ class Storm():
     def prependZeroes(self, n: int):
         firstFrame = self.frames[0]
         for m in range(n):
-            time = firstFrame.time + dt.timedelta(hours=(m+1))
+            time = firstFrame.time - dt.timedelta(hours=(m+1))
             data = np.zeros(firstFrame.data.shape)
             lowerLeft = firstFrame.lowerLeft
             pixelSize = firstFrame.pixelSize
+            labels = [0] * len(firstFrame.labels)
             zeroFrame = RadarFrame(time, data, lowerLeft, pixelSize)
+            zeroFrame.labels = labels
             self.frames.append(zeroFrame)
+        self.frames.sort(key = lambda i: i.time)
 
 
 
@@ -412,6 +378,12 @@ def getStorms(fromTime: dt.datetime, toTime: dt.datetime, imageSize: int, normal
     return storms
 
 
+def analyseStorm(storm: Storm): 
+    for frame in storm.frames: 
+        labels = analyzeTimestep(storm.frames, frame.time)
+        frame.labels = labels
+
+
 def saveStormsToFile(fileName: str, storms: List[Storm]):
     if os.path.isfile(fileName):
         raise Exception("File {} already exists".format(fileName))
@@ -429,7 +401,7 @@ def saveStormsToFile(fileName: str, storms: List[Storm]):
         f.attrs["toTime"] = toTime.timestamp()
         for i, storm in enumerate(storms):
             groupName = "storm_" + str(i)
-            group = h5.create_group(groupName)
+            group = f.create_group(groupName)
             fromTime, toTime = storm.getTimeRange()
             group.attrs["fromTime"] = fromTime.timestamp()
             group.attrs["toTime"] = toTime.timestamp()
@@ -437,10 +409,16 @@ def saveStormsToFile(fileName: str, storms: List[Storm]):
             group.attrs["pixelSize"] = storm.frames[0].pixelSize
             for j, frame in enumerate(storm.frames):
                 dsetName = "frame_" + str(j)
-                dset = group.create_dataset("{}/{}".format(groupName, dsetName), data=frame.data)
+                dset = f.create_dataset("{}/{}".format(groupName, dsetName), data=frame.data)
                 dset.attrs["labels"] = frame.labels
-                dset.attrs["time"] = frame.time
+                dset.attrs["time"] = frame.time.timestamp()
 
+
+def getAnalyseAndSaveStorms(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, imageSize: int):
+    storms = getStorms(fromTime, toTime, imageSize)
+    for storm in storms: 
+        analyseStorm(storm)
+    saveStormsToFile(fileName, storms)
 
 
 def loadStormsFromFile(fileName: str) -> List[Storm]:
@@ -455,99 +433,42 @@ def loadStormsFromFile(fileName: str) -> List[Storm]:
             for dsetName in group.keys():
                 dset = group[dsetName]
                 time = dt.datetime.fromtimestamp(dset.attrs["time"])
-                data = dset.data
+                data = np.array(dset)
+                labels = dset.attrs["labels"]
                 frame = RadarFrame(time, data, lowerLeft, pixelSize)
+                frame.labels = labels
                 frames.append(frame)
             storm = Storm(frames)
             storms.append(storm)
     return storms
 
 
-def npStormBatchesFromFile(fileName: str, batchSize: int, timeSteps: int):
+def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.array, np.array]:
     storms = loadStormsFromFile(fileName)
+    frame0 = storms[0].frames[0]
+    imageWidth, imageHeight = frame0.data.shape
+    inpt = np.zeros([nrSamples, timeSteps, imageWidth, imageHeight, 1])
+    outpt = np.zeros([nrSamples, 3])
+    nrSamples = min(nrSamples, len(storms))
+    for sample in range(nrSamples):
+        storm = storms[sample]
+        if len(storm.frames) < timeSteps:
+            #print("storm {} has length {} and will be padded with {} frames".format(sample, len(storm.frames), timeSteps - len(storm.frames)))
+            storm.prependZeroes(timeSteps - len(storm.frames))
+        for time in range(timeSteps):
+            frame = storm.frames[time]
+            inpt[sample, time, :, :, 0] = frame.data
+            #print("storm {} frame {} maxval {}".format(sample, time, np.max(frame.data)))
+        outpt[sample, :] = frame.labels
+    return inpt, outpt
 
 
 if __name__ == "__main__":
     fromTime = dt.datetime(2017, 6, 1, 8)
     toTime = dt.datetime(2017, 6, 1, 12)
-    timeSteps = 15
     imageSize = 81
-    storms = getStorms(fromTime, toTime, imageSize)
-    for storm in storms:
-        print(storm)
-
-
-
-
-# def getLabeledTimeseriesAsNp(fromTime: dt.datetime, timeSteps: int, imageSize: int, normalizer = 500) -> Tuple[np.array, np.array]:
-#     toTime = fromTime + dt.timedelta(hours=timeSteps)
-#     imageWidth = imageHeight = imageSize
-#     dataIn = np.zeros([timeSteps, imageWidth, imageHeight, 1])
-#     dataOut = np.zeros([3])
-#     labeledSeries = getLabeledTimeseries(fromTime, toTime, 1)
-#     cropAroundMaximum(labeledSeries, imageSize)
-#     for timeNr, frame in enumerate(labeledSeries):
-#         dataIn[timeNr, :, :, 0] = frame.data / normalizer
-#     dataOut[:] = labeledSeries[-1].labels
-#     return (dataIn, dataOut)
-
-
-# def analyzeDataOffline(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, timeSteps: int, imageSize: int):
-#     if os.path.isfile(fileName):
-#         raise Exception("File {} already exists".format(fileName))
-
-#     with h5.File(fileName, 'w') as f:
-
-#         f.attrs["fromTime"] = fromTime.timestamp()
-#         f.attrs["toTime"] = toTime.timestamp()
-#         f.attrs["timeSteps"] = timeSteps
-#         f.attrs["imageSize"] = imageSize
-
-#         frameStart = fromTime
-#         frameEnd = frameStart + dt.timedelta(hours=timeSteps)
-
-#         while frameEnd < toTime:
-#             try:
-#                 tprint("analyzing {} to {}. ".format(frameStart, frameEnd))
-#                 dataIn, dataOut = getLabeledTimeseriesAsNp(frameStart, timeSteps, imageSize)
-#                 dsetIn = f.create_dataset("{}_{}_input".format(frameStart, frameEnd), data=dataIn)
-#                 dsetOut = f.create_dataset("{}_{}_output".format(frameStart, frameEnd), data=dataOut)
-#                 dsetIn.attrs["startTime"] = frameStart.timestamp()
-#                 dsetIn.attrs["endTime"] = frameEnd.timestamp()
-#                 dsetIn.attrs["type"] = "input"
-#                 dsetOut.attrs["startTime"] = frameStart.timestamp()
-#                 dsetOut.attrs["endTime"] = frameEnd.timestamp()
-#                 dsetOut.attrs["type"] = "output"
-#             except (IOError, KeineDatenException):
-#                 tprint("Keine Daten erhalten für {} bis {}. Probiere es mit anderem Zeitraum".format(fromTime, toTime))
-#             finally:
-#                 frameStart += dt.timedelta(hours=24)
-#                 frameEnd = frameStart + dt.timedelta(hours=timeSteps)
-
-
-
-# def fileRadarGenerator(fileName: str, batchSize: int):
-#     with h5.File(fileName, 'r') as f:
-
-#         fromTime = dt.datetime.fromtimestamp(int(f.attrs["fromTime"]))
-#         toTime = dt.datetime.fromtimestamp(int(f.attrs["toTime"]))
-#         timeSteps = int(f.attrs["timeSteps"])
-#         imageSize = int(f.attrs["imageSize"])
-
-#         frameStart = fromTime
-#         frameEnd = frameStart + dt.timedelta(hours=timeSteps)
-
-#         while True:
-#             imageWidth = imageHeight = imageSize
-#             batchIn = np.zeros([batchSize, timeSteps, imageWidth, imageHeight, 1])
-#             batchOut = np.zeros([batchSize, 3])
-#             for batchNr in range(batchSize):
-#                 batchIn[batchNr, :, :, :, :] = f["{}_{}_input".format(frameStart, frameEnd)]
-#                 batchOut[batchNr, :] = f["{}_{}_output".format(frameStart, frameEnd)]
-#                 frameStart += dt.timedelta(hours=24)
-#                 frameEnd = frameStart + dt.timedelta(hours=timeSteps)
-#                 if frameEnd >= toTime: 
-#                     frameStart = fromTime
-#                     frameEnd = frameStart + dt.timedelta(hours=timeSteps)
-#             yield (batchIn, batchOut)
+    getAnalyseAndSaveStorms("processedData/test.hdf5", fromTime, toTime, imageSize)
+    inpt, outpt = npStormsFromFile("processedData/test.hdf5", 5, 15)
+    pl.movie(inpt[2], outpt[2])
+    os.remove("processedData/test.hdf5")
 

@@ -21,11 +21,8 @@ imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
 
-rd.analyzeDataOffline("processedData/training_data.hdf5", dt.datetime(2016, 4, 1, 8), dt.datetime(2016, 10, 30, 22), timeSteps, imageSize)
-rd.analyzeDataOffline("processedData/validation_data.hdf5", dt.datetime(2017, 6, 1, 8), dt.datetime(2017, 8, 30, 22), timeSteps, imageSize)
-
-trainingGenerator = rd.fileRadarGenerator("processedData/training_data.hdf5", batchSize)
-validationGenerator = rd.fileRadarGenerator("processedData/validation_data.hdf5", batchSize)
+rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
+inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 1000, timeSteps)
 
 
 model = k.models.Sequential([
@@ -89,13 +86,22 @@ customPlotCallback = CustomPlotCallback()
 
 
 
-history = model.fit_generator(
-    generator=trainingGenerator,
-    steps_per_epoch=25,       # number of batches to be drawn from generator
-    epochs=10,                 # number of times the data is repeated
-    validation_data=validationGenerator,
-    validation_steps=5,       # number of batches to be drawn from generator
-    callbacks=[modelSaver, tensorBoard, customPlotCallback] 
+# history = model.fit_generator(
+#     generator=trainingGenerator,
+#     steps_per_epoch=25,       # number of batches to be drawn from generator
+#     epochs=10,                 # number of times the data is repeated
+#     validation_data=validationGenerator,
+#     validation_steps=5,       # number of batches to be drawn from generator
+#     callbacks=[modelSaver, tensorBoard, customPlotCallback] 
+# )
+
+history = model.fit(
+    x=inpt_training, 
+    y=outpt_training, 
+    validation_split=0.1, 
+    batch_size=10, 
+    epochs=10, 
+    callbacks=[modelSaver, tensorBoard, customPlotCallback]
 )
 
 
