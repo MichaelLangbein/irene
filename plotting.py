@@ -1,13 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from radarData import translateLabels
 
 
 def movie(data, labels, saveFileName = None):
     fig = plt.figure()
     dataToDraw = data[0,:,:,0]
-    labelsString = ", ".join(translateLabels(labels))
+    labelsString = ", ".join(labels)
     img = plt.imshow(dataToDraw)
     axes = fig.get_axes()
     axes[0].set_title(labelsString)
