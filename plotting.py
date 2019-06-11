@@ -6,7 +6,7 @@ from matplotlib.animation import FuncAnimation
 def movie(data, labels, saveFileName = None):
     fig = plt.figure()
     dataToDraw = data[0,:,:,0]
-    labelsString = ", ".join(labels)
+    labelsString = ", ".join(str(labels))
     img = plt.imshow(dataToDraw)
     axes = fig.get_axes()
     axes[0].set_title(labelsString)

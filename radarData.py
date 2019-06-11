@@ -424,21 +424,26 @@ def threadedGetAndAnalyseStorms(fromTime: dt.datetime, toTime: dt.datetime, imag
     return threadStorms
 
 
-def getAnalyseAndSaveStorms(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, imageSize: int):
+def getAnalyseAndSaveStorms(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, imageSize: int, nrThreads: int = 4):
 
-    threadArgs = []
+    fromTimes = []
+    toTimes = []
+    imageSizes = []
     delta = dt.timedelta(days = 1)
     batchFromTime = fromTime
     batchToTime = fromTime + delta
     while batchFromTime < toTime:
         batchFromTime += delta
         batchToTime += delta
-        threadArgs.append({"fromTime": batchFromTime, "toTime": batchToTime, "imageSize": imageSize})
+        fromTimes.append(batchFromTime)
+        toTimes.append(batchToTime)
+        imageSizes.append(imageSize)
 
     storms: List[Storm] = []
-    tprint("This will yield {} threads".format(len(threadArgs)))
-    with cf.ThreadPoolExecutor(max_workers=len(threadArgs)) as executor:
-        executor.map(threadedGetAndAnalyseStorms, threadArgs)
+    with cf.ThreadPoolExecutor(max_workers=nrThreads) as executor:
+        results = executor.map(threadedGetAndAnalyseStorms, fromTimes, toTimes, imageSizes)
+        for result in results:
+            storms += result
 
     saveStormsToFile(fileName, storms)
 
@@ -487,7 +492,7 @@ def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.
 
 if __name__ == "__main__":
     fromTime = dt.datetime(2017, 6, 1, 8)
-    toTime = dt.datetime(2017, 6, 1, 12)
+    toTime = dt.datetime(2017, 6, 14, 12)
     imageSize = 81
     getAnalyseAndSaveStorms("processedData/test.hdf5", fromTime, toTime, imageSize)
     inpt, outpt = npStormsFromFile("processedData/test.hdf5", 5, 15)
