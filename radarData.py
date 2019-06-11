@@ -21,6 +21,7 @@ import tensorflow as tf
 import threading
 import h5py as h5
 import plotting as pl
+import concurrent.futures as cf
 
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
@@ -185,6 +186,7 @@ def getTimeSteps(fromTime: dt.datetime, toTime: dt.datetime, deltaHours: int):
 
 def getRadarDataForTime(time: dt.datetime) -> RadarFrame:
     fileName = getRadarFileName(time)
+    tprint("searching for {}".format(fileName))
     if os.path.isfile(rawDataDir + fileName):
         return fileToRadarFrame(time)
     else:
@@ -414,10 +416,30 @@ def saveStormsToFile(fileName: str, storms: List[Storm]):
                 dset.attrs["time"] = frame.time.timestamp()
 
 
+def threadedGetAndAnalyseStorms(fromTime: dt.datetime, toTime: dt.datetime, imageSize: int): 
+    tprint("now working on timerange {} to {}".format(fromTime, toTime))
+    threadStorms = getStorms(fromTime, toTime, imageSize)
+    for storm in threadStorms: 
+            analyseStorm(storm)
+    return threadStorms
+
+
 def getAnalyseAndSaveStorms(fileName: str, fromTime: dt.datetime, toTime: dt.datetime, imageSize: int):
-    storms = getStorms(fromTime, toTime, imageSize)
-    for storm in storms: 
-        analyseStorm(storm)
+
+    threadArgs = []
+    delta = dt.timedelta(days = 1)
+    batchFromTime = fromTime
+    batchToTime = fromTime + delta
+    while batchFromTime < toTime:
+        batchFromTime += delta
+        batchToTime += delta
+        threadArgs.append({"fromTime": batchFromTime, "toTime": batchToTime, "imageSize": imageSize})
+
+    storms: List[Storm] = []
+    tprint("This will yield {} threads".format(len(threadArgs)))
+    with cf.ThreadPoolExecutor(max_workers=len(threadArgs)) as executor:
+        executor.map(threadedGetAndAnalyseStorms, threadArgs)
+
     saveStormsToFile(fileName, storms)
 
 
