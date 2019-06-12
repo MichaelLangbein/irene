@@ -21,7 +21,7 @@ imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
 
-rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
+#rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
 inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 1000, timeSteps)
 
 

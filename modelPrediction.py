@@ -1,7 +1,7 @@
 import os
 import tensorflow.keras as k
 import datetime as dt
-from radarData import getOverlappingLabeledTimeseries
+import radarData as rd
 from plotting import movie
 
 
@@ -11,7 +11,7 @@ modelName = "simpleRadPredModel_checkpoint.h5"
 
 
 model = k.models.load_model(tfDataDir + modelName)
-dataIn, dataOut = getOverlappingLabeledTimeseries(41, dt.datetime(2016, 6, 12), dt.datetime(2016, 6, 13), 15, 1)
+dataIn, dataOut = rd.npStormsFromFile("processedData/training.hdf5", 5, 15)
 prediction = model.predict(dataIn)
 
 for r, row in enumerate(prediction):

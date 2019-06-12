@@ -87,7 +87,7 @@ class RadarFrame:
         newFrame = RadarFrame(self.time, newData, [xLL, yLL], self.pixelSize)
         return newFrame
     
-    def cropAroundCoords(self, cX, cY, w):
+    def cropedAroundCoords(self, cX, cY, w):
         x, y = self.getIndexOfCoords(cX, cY)
         return self.cropAroundIndex(x, y, w)
 
@@ -226,7 +226,10 @@ def getRadarData(fromTime: dt.datetime, toTime: dt.datetime, deltaHours=1) -> Li
     fromTime = fromTime.replace(minute=50)
     timeSteps = getTimeSteps(fromTime, toTime, deltaHours)
     for time in timeSteps:
-        data.append(getRadarDataForTime(time))
+        try: 
+            data.append(getRadarDataForTime(time))
+        except: 
+            print("Something went wrong at {}".format(time))
     return data
 
 
@@ -332,18 +335,24 @@ class Storm():
         if self.fitsIn(frame):
             cX, cY = self.frames[0].getCoordsOfCenter()
             X, Y = self.frames[0].data.shape
-            croppedFrame = frame.cropAroundCoords(cX, cY, X)
+            croppedFrame = frame.cropedAroundCoords(cX, cY, X)
             self.frames.append(croppedFrame)
-        self.frames.sort(key = lambda i: i.time)
+            self.frames.sort(key = lambda i: i.time)
 
     def applyToFrames(self, func):
         for frame in self.frames: 
             func(frame)
 
+    def appendData(self, frame: RadarFrame): 
+        if self.fitsIn(frame):
+            self.frames.append(frame)
+            self.frames.sort(key = lambda i: i.time)
+
     def prependZeroes(self, n: int):
         firstFrame = self.frames[0]
         for m in range(n):
             time = firstFrame.time - dt.timedelta(hours=(m+1))
+            print("padding zeros at time {}".format(time))
             data = np.zeros(firstFrame.data.shape)
             lowerLeft = firstFrame.lowerLeft
             pixelSize = firstFrame.pixelSize
@@ -365,11 +374,12 @@ def getStorms(fromTime: dt.datetime, toTime: dt.datetime, imageSize: int, normal
         while maxval > threshold: 
 
             cX, cY = frame.getCoordsOfIndex(x, y)
-            croppedFrame = frame.cropAroundCoords(cX, cY, imageSize)
+            croppedFrame = frame.cropedAroundCoords(cX, cY, imageSize)
             
             matchingStorms = [storm for storm in storms if storm.fitsIn(croppedFrame)]
             for storm in matchingStorms: 
-                storm.takeOutData(frame)
+                #storm.takeOutData(frame)
+                storm.appendData(croppedFrame)
             if not matchingStorms:
                 storms.append(Storm([croppedFrame]))
             
@@ -479,23 +489,27 @@ def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.
     nrSamples = min(nrSamples, len(storms))
     for sample in range(nrSamples):
         storm = storms[sample]
+        print("storm has length {} hours".format(len(storm.frames)))
         if len(storm.frames) < timeSteps:
-            #print("storm {} has length {} and will be padded with {} frames".format(sample, len(storm.frames), timeSteps - len(storm.frames)))
             storm.prependZeroes(timeSteps - len(storm.frames))
         for time in range(timeSteps):
             frame = storm.frames[time]
             inpt[sample, time, :, :, 0] = frame.data
-            #print("storm {} frame {} maxval {}".format(sample, time, np.max(frame.data)))
+            print("assigning data from time {} with maxval {} to slot {}".format(frame.time, np.max(frame.data), time))
         outpt[sample, :] = frame.labels
     return inpt, outpt
 
 
 if __name__ == "__main__":
     fromTime = dt.datetime(2017, 6, 1, 8)
-    toTime = dt.datetime(2017, 6, 14, 12)
+    toTime = dt.datetime(2017, 6, 3, 12)
     imageSize = 81
+    try:
+        os.remove("processedData/test.hdf5")
+    except: 
+        pass
     getAnalyseAndSaveStorms("processedData/test.hdf5", fromTime, toTime, imageSize)
     inpt, outpt = npStormsFromFile("processedData/test.hdf5", 5, 15)
-    pl.movie(inpt[2], outpt[2])
-    os.remove("processedData/test.hdf5")
+    for i in range(len(outpt)):
+        pl.movie(inpt[i], outpt[i])
 
