@@ -8,7 +8,7 @@
 
 # TODO: wie umgehen mit fehlenden Daten?
 
-from typing import List, Tuple
+from typing import List, Tuple, Union, Optional
 import collections as c
 from utils import extract, httpDownloadFile, MyFtpServer, tprint
 import config as conf
@@ -243,7 +243,7 @@ def hatStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     toTime = time
     fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = np.sum([el.data for el in lastSixHours])
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
     lastEntry = lastSixHours[-1].data
     shortTerm = (250 >= np.max(lastEntry) >= 150)
     longTerm = (350 >= np.max(sixHourSum) >= 200)
@@ -259,7 +259,7 @@ def hatHeftigerStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     toTime = time
     fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = np.sum([el.data for el in lastSixHours])
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
     lastEntry = lastSixHours[-1].data
     shortTerm = (400 >= np.max(lastEntry) > 250)
     longTerm = (600 >= np.max(sixHourSum) > 350)
@@ -275,7 +275,7 @@ def hatExtremerStarkregen(series: List[RadarFrame], time: dt.datetime) -> bool:
     toTime = time
     fromTime = time - dt.timedelta(hours=6)
     lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
-    sixHourSum = np.sum([el.data for el in lastSixHours])
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
     lastEntry = lastSixHours[-1].data
     shortTerm = (np.max(lastEntry) >= 400)
     longTerm = (np.max(sixHourSum) >= 600)
@@ -318,6 +318,12 @@ class Storm():
         minTime = min(times)
         maxTime = max(times)
         return (minTime, maxTime)
+
+    def getFrameByTime(self, time: dt.datetime) -> Optional[RadarFrame]:
+        for frame in self.frames:
+            if frame.time == time:
+                return frame
+        return None
 
     def beforeOrAfter(self, time: dt.datetime) -> bool:
         deltaT = dt.timedelta(hours=1)
@@ -364,9 +370,13 @@ class Storm():
 
 
 def getStorms(fromTime: dt.datetime, toTime: dt.datetime, imageSize: int, normalizer = 500, threshold = 50) -> List[Storm]:
+
+    def euclidianDistance(pt1: Tuple, pt2: Tuple) -> float:
+        return np.sqrt( (pt1[0] - pt2[0])**2 + (pt1[1] - pt2[1])**2 )
     
     radarData = getRadarData(fromTime, toTime)
     storms: List[Storm] = []
+    maxDistance = radarData[0].pixelSize * 40
 
     for frame in radarData: 
         maxval, x, y = frame.getMaximumWithIndex()
@@ -375,9 +385,9 @@ def getStorms(fromTime: dt.datetime, toTime: dt.datetime, imageSize: int, normal
             cX, cY = frame.getCoordsOfIndex(x, y)
             croppedFrame = frame.cropedAroundCoords(cX, cY, imageSize)
             
-            matchingStorms = [storm for storm in storms if storm.fitsIn(croppedFrame)]
+            matchingStorms = [storm for storm in storms if (euclidianDistance(storm.frames[-1].getCoordsOfCenter(), croppedFrame.getCoordsOfCenter()) < maxDistance)]
             for storm in matchingStorms: 
-                #storm.takeOutData(frame)
+                # storm.takeOutData(frame)
                 storm.appendData(croppedFrame)
             if not matchingStorms:
                 storms.append(Storm([croppedFrame]))
@@ -484,6 +494,34 @@ def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> Lis
     return storms
 
 
+def redoAnalysis(fileName: str): 
+    with h5.File(fileName, 'a') as f:
+        for groupName in f.keys():
+            group = f[groupName]
+            fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
+            lowerLeft = group.attrs["lowerLeft"]
+            pixelSize = group.attrs["pixelSize"]
+            frames = []
+            for dsetName in group.keys():
+                dset = group[dsetName]
+                time = dt.datetime.fromtimestamp(dset.attrs["time"])
+                data = np.array(dset)
+                labels = dset.attrs["labels"]
+                frame = RadarFrame(time, data, lowerLeft, pixelSize)
+                frame.labels = labels
+                frames.append(frame)
+            storm = Storm(frames)
+            analyseStorm(storm)
+            for dsetName in group.keys():
+                dset = group[dsetName]
+                time = dt.datetime.fromtimestamp(dset.attrs["time"])
+                fram: Optional[RadarFrame] = storm.getFrameByTime(time)
+                if fram: 
+                    print("updating labels from {} to {}".format(dset.attrs["labels"], fram.labels))
+                    dset.attrs["labels"] = fram.labels
+
+
+
 def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.array, np.array]:
     storms = loadStormsFromFile(fileName, nrSamples, 3)
     frame0 = storms[0].frames[0]
@@ -491,6 +529,7 @@ def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.
     inpt = np.zeros([nrSamples, timeSteps, imageWidth, imageHeight, 1])
     outpt = np.zeros([nrSamples, 3])
     nrSamples = min(nrSamples, len(storms))
+    occurrences = np.zeros((3,))
     for sample in range(nrSamples):
         storm = storms[sample]
         if len(storm.frames) < timeSteps + 1:
@@ -499,18 +538,27 @@ def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.
             frame = storm.frames[time]
             inpt[sample, time, :, :, 0] = frame.data
         outpt[sample, :] = storm.frames[timeSteps].labels
+        print("Samplenr {}: storm with maxVal {} and labels {}".format(sample, np.max([s.data for s in storm.frames]), outpt[sample, :]))
+        occurrences += outpt[sample, :]
+    print("total occurrences: {}".format(occurrences))
     return inpt, outpt
 
 
 if __name__ == "__main__":
-    fromTime = dt.datetime(2017, 6, 1, 8)
-    toTime = dt.datetime(2017, 6, 3, 12)
-    imageSize = 81
-    try:
-        os.remove("processedData/test.hdf5")
-    except: 
-        pass
-    getAnalyseAndSaveStorms("processedData/test.hdf5", fromTime, toTime, imageSize)
+    
+    # getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 4, 3), 81)
+    # redoAnalysis("processedData/training.hdf5")
+    # inpt, outpt = npStormsFromFile("processedData/training.hdf5", 5, 15)
+
+
+    # fromTime = dt.datetime(2017, 6, 1, 8)
+    # toTime = dt.datetime(2017, 6, 10, 12)
+    # imageSize = 81
+    # try:
+    #     os.remove("processedData/test.hdf5")
+    # except: 
+    #     pass
+    # getAnalyseAndSaveStorms("processedData/test.hdf5", fromTime, toTime, imageSize)
     inpt, outpt = npStormsFromFile("processedData/test.hdf5", 5, 15)
     for i in range(len(outpt)):
         pl.movie(inpt[i], outpt[i])
