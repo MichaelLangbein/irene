@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 
-def movie(data, labels, saveFileName = None):
+def movie(data: np.array, labels, saveFileName = None):
 
     fig = plt.figure()
 
@@ -12,17 +12,20 @@ def movie(data, labels, saveFileName = None):
         dataToDraw.append(data[i,:,:,0])
 
     img = plt.imshow(dataToDraw[0])
+    img.norm.vmin = np.min(data)
+    img.norm.vmax = np.max(data)
     axes = fig.get_axes()
 
     labelsString = ", ".join(str(labels))
     axes[0].set_title(labelsString)
 
-    def animate(frame):
+    def animate(frameNr):
+        frame = dataToDraw[frameNr]
         img.set_data(frame)
-        plt.xlabel(" maxval: " + str(np.max(frame)))
+        plt.xlabel("Frame {},  maxval {}".format(frameNr, np.max(frame)))
         return img, labelsString
 
-    animation = FuncAnimation(fig, animate, interval=500, repeat=True, frames=dataToDraw)
+    animation = FuncAnimation(fig, animate, frames=range(data.shape[0]), interval=500, repeat=True, repeat_delay=1000)
 
     if not saveFileName: 
         plt.show()

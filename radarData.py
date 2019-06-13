@@ -352,7 +352,6 @@ class Storm():
         firstFrame = self.frames[0]
         for m in range(n):
             time = firstFrame.time - dt.timedelta(hours=(m+1))
-            print("padding zeros at time {}".format(time))
             data = np.zeros(firstFrame.data.shape)
             lowerLeft = firstFrame.lowerLeft
             pixelSize = firstFrame.pixelSize
@@ -458,8 +457,9 @@ def getAnalyseAndSaveStorms(fileName: str, fromTime: dt.datetime, toTime: dt.dat
     saveStormsToFile(fileName, storms)
 
 
-def loadStormsFromFile(fileName: str) -> List[Storm]:
+def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> List[Storm]:
     storms = []
+    i = 0
     with h5.File(fileName, 'r') as f:
         for groupName in f.keys():
             group = f[groupName]
@@ -475,13 +475,17 @@ def loadStormsFromFile(fileName: str) -> List[Storm]:
                 frame = RadarFrame(time, data, lowerLeft, pixelSize)
                 frame.labels = labels
                 frames.append(frame)
-            storm = Storm(frames)
-            storms.append(storm)
+            if len(frames) >= minLength: 
+                storm = Storm(frames)
+                storms.append(storm)
+                i += 1
+            if i >= nrSamples:
+                break
     return storms
 
 
 def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.array, np.array]:
-    storms = loadStormsFromFile(fileName)
+    storms = loadStormsFromFile(fileName, nrSamples, 3)
     frame0 = storms[0].frames[0]
     imageWidth, imageHeight = frame0.data.shape
     inpt = np.zeros([nrSamples, timeSteps, imageWidth, imageHeight, 1])
@@ -489,14 +493,12 @@ def npStormsFromFile(fileName: str, nrSamples: int, timeSteps: int) -> Tuple[np.
     nrSamples = min(nrSamples, len(storms))
     for sample in range(nrSamples):
         storm = storms[sample]
-        print("storm has length {} hours".format(len(storm.frames)))
-        if len(storm.frames) < timeSteps:
-            storm.prependZeroes(timeSteps - len(storm.frames))
+        if len(storm.frames) < timeSteps + 1:
+            storm.prependZeroes(timeSteps + 1 - len(storm.frames))
         for time in range(timeSteps):
             frame = storm.frames[time]
             inpt[sample, time, :, :, 0] = frame.data
-            print("assigning data from time {} with maxval {} to slot {}".format(frame.time, np.max(frame.data), time))
-        outpt[sample, :] = frame.labels
+        outpt[sample, :] = storm.frames[timeSteps].labels
     return inpt, outpt
 
 
