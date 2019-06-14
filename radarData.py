@@ -471,6 +471,7 @@ def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> Lis
     storms = []
     i = 0
     with h5.File(fileName, 'r') as f:
+        print("getting {} storms out of {} available".format(nrSamples, len(f.keys())))
         for groupName in f.keys():
             group = f[groupName]
             fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])

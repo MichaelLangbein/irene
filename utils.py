@@ -109,7 +109,7 @@ class MyFtpServer:
 
 
     def __del__(self):
-        tprint("Now deleting Ftp-Server")
+        pass
         #if self.server:
         #    self.server.quit()
 

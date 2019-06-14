@@ -7,11 +7,7 @@ def movie(data: np.array, labels, saveFileName = None):
 
     fig = plt.figure()
 
-    dataToDraw = []
-    for i in range(data.shape[0]):
-        dataToDraw.append(data[i,:,:,0])
-
-    img = plt.imshow(dataToDraw[0])
+    img = plt.imshow(data[0])
     img.norm.vmin = np.min(data)
     img.norm.vmax = np.max(data)
     axes = fig.get_axes()
@@ -20,7 +16,7 @@ def movie(data: np.array, labels, saveFileName = None):
     axes[0].set_title(labelsString)
 
     def animate(frameNr):
-        frame = dataToDraw[frameNr]
+        frame = data[frameNr]
         img.set_data(frame)
         plt.xlabel("Frame {},  maxval {}".format(frameNr, np.max(frame)))
         return img, labelsString

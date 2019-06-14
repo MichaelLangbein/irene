@@ -21,8 +21,8 @@ imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
 
-rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
-inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 1000, timeSteps)
+#rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
+inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 10000, timeSteps)
 
 
 model = k.models.Sequential([
@@ -33,16 +33,20 @@ model = k.models.Sequential([
     k.layers.Conv3D(5, (2,2,2), name="conv3"),
     k.layers.MaxPool3D(),
     k.layers.Flatten(),
-    k.layers.Dense(33, name="dense1"),
-    k.layers.Dense(10, name="dense2"),
-    k.layers.Dense(3, name="dense3")
+    k.layers.Dense(33, name="dense1", activation=k.activations.sigmoid),
+    k.layers.Dense(20, name="dense2", activation=k.activations.sigmoid),
+    k.layers.Dense(20, name="dense3", activation=k.activations.sigmoid),
+    k.layers.Dense(10, name="dense4", activation=k.activations.sigmoid),
+    k.layers.Dense(3, name="dense5", activation=k.activations.sigmoid)
 ])
 
 
 model.compile(
-    optimizer=k.optimizers.Adam(),
+    optimizer=k.optimizers.RMSprop(lr=0.05),
     loss=k.losses.binary_crossentropy
 )
+
+print(model.summary())
 
 
 modelSaver = k.callbacks.ModelCheckpoint(
@@ -110,4 +114,5 @@ resultDir = "{}{}".format(tfDataDir, tstp)
 if not os.path.exists(resultDir):
     os.makedirs(resultDir)
 model.save("{}/simpleRadPredModel.h5".format(resultDir))
+model.save("{}/latestRadPredModel.h5".format(tfDataDir))
 createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])

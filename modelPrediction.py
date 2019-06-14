@@ -7,7 +7,7 @@ from plotting import movie
 
 thisDir = os.path.dirname(os.path.abspath(__file__))
 tfDataDir = thisDir + "/tfData/"
-modelName = "simpleRadPredModel_checkpoint.h5"
+modelName = "latestRadPredModel.h5"
 
 
 model = k.models.load_model(tfDataDir + modelName)
