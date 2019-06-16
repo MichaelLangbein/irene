@@ -7,3 +7,4 @@ npyData/*
 .mypy_cache
 **/*.hdf5
 **/*.tar.gz
+**/*.h5

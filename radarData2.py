@@ -3,13 +3,77 @@ import numpy as np
 import datetime as dt
 import wradlib as wrl
 import matplotlib.pyplot as plt
+import h5py as h5
 import plotting as p
+from typing import List, Tuple, Union, Optional
 
 
 """ 
     downloaded from ftp://opendata.dwd.de/climate_environment/CDC/grids_germany/5_minutes/ 
     read with https://docs.wradlib.org/en/stable/notebooks/radolan/radolan_format.html
 """ 
+
+
+
+class Frame:
+    def __init__(self, data: np.array, attrs, tlIndx: Tuple = (0, 0)):
+        self.data = data
+        self.attrs = attrs
+        self.time = attrs['datetime']
+        self.tlIndx = tlIndx
+        self.labels = {}
+
+    def getSubframe(self, indices: Tuple) -> 'Frame':
+        (rfOld, cfOld) = self.tlIndx
+        ((rf, rt), (cf, ct)) = indices
+        newData = self.data[rf:rt, cf:ct]
+        newTlIndx = (rfOld + rf, cfOld + cf)
+        return Frame(newData, self.attrs, newTlIndx)
+
+    def getId(self) ->str:
+        return f"frame_{self.time}_{self.tlIndx}"
+
+
+class Film:
+    def __init__(self, frames: List[Frame]):
+        self.frames = frames
+        self.frames.sort(key = lambda i: i.time)
+
+    def append(self, frame: Frame):
+        if len(self.frames) == 0:
+            self.frames.append(frame)
+        else:
+            if frame.tlIndx == self.frames[0].tlIndx:
+                startTime, endTime = self.getTimeRange()
+                if frame.time == endTime + dt.timedelta(minutes=5):
+                    self.frames.append(frame)
+                    self.frames.sort(key = lambda i: i.time)
+
+    def getNpData(self) -> np.array:
+        T = len(self.frames)
+        H, W = self.frames[0].data.shape
+        data = np.zeros((T, H, W))
+        for t in range(T):
+            data[t, :, :] = self.frames[t].data
+        return data
+
+    def getFrameByTime(self, time: dt.datetime) -> Optional[Frame]:
+        for frame in self.frames:
+            if frame.time == time:
+                return frame
+        return None
+
+    def getTimeRange(self) -> Tuple[dt.datetime, dt.datetime]:
+        times = [frame.time for frame in self.frames]
+        minTime = min(times)
+        maxTime = max(times)
+        return (minTime, maxTime)
+
+    def getId(self):
+        fromTime, toTime = self.getTimeRange()
+        tlIndx = self.frames[0].tlIndx
+        return f"storm_{tlIndx}_{fromTime}_{toTime}"
+
 
 
 def getRadarFileName(date: dt.datetime) -> str: 
@@ -29,55 +93,257 @@ def readRadolanFile(date: dt.datetime):
     return data, attrs
 
 
-def plotRadolanData(data, attrs, clabel=None):
-    grid = wrl.georef.get_radolan_grid(*data.shape)
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_subplot(111, aspect='equal')
-    x = grid[:,:,0]
-    y = grid[:,:,1]
-    pm = ax.pcolormesh(x, y, data, cmap='viridis')
-    cb = fig.colorbar(pm, shrink=0.75)
-    cb.set_label(clabel)
-    plt.xlabel("x [km]")
-    plt.ylabel("y [km]")
-    plt.title('{0} Product\n{1}'.format(attrs['producttype'],
-                                       attrs['datetime'].isoformat()))
-    plt.xlim((x[0,0],x[-1,-1]))
-    plt.ylim((y[0,0],y[-1,-1]))
-    plt.grid(color='r')
-    plt.show()
-
-
-def getDaysData(date: dt.date):
-    startTime = dt.datetime(date.year, date.month, date.day)
+def getDayData(date: dt.date):
+    startTime = dt.datetime(date.year, date.month, date.day, 10)
+    endTime = dt.datetime(date.year, date.month, date.day, 22)
     dataList = []
     attrList = []
-    for minute in range(0, 24*60, 5):
-        time = startTime + dt.timedelta(minutes=minute)
+    time = startTime
+    while time < endTime:
         data, attrs = readRadolanFile(time)
         data[data==-9999] = 0 #np.NaN
         dataList.append(data)
         attrList.append(attrs)
+        time += dt.timedelta(minutes=5)
     return dataList, attrList
 
 
+def getDayFrames(date: dt.date) -> List[Frame]:
+    dataL, attrL = getDayData(date)
+    frames: List[Frame] = []
+    for i in range(len(dataL)):
+        frames.append(Frame(dataL[i], attrL[i]))
+    return frames
+
+
 def splitDay(date: dt.date):
-    dataL, attrL = getDaysData(date)
-    films = []
-    for x in range(11 * 2 - 1):
-        films.append([])
-        for y in range(9 * 2 - 1):
-            filmData = np.zeros((288, 100, 100))
-            for m5 in range(288):
-                xstart = x * 50
-                ystart = y * 50
-                filmData[m5, :, :] = dataL[m5][xstart : xstart + 100, ystart : ystart + 100]
-            films[x].append(filmData)
+    print(f"reading and splitting day {date}")
+    frames = getDayFrames(date)
+    H, W = frames[0].data.shape
+    frameHeight = frameWidth = frameLength = 100
+    frameOffset = 50
+    r = 0
+    c = 0
+    films: List[Film] = []
+    while r + frameHeight <= H:
+        while c + frameWidth <= W:
+            film = Film([])
+            for frame in frames:
+                subframe = frame.getSubframe(((r, r + frameHeight), (c, c + frameWidth)))
+                film.append(subframe)
+            films.append(film)
+            c += frameOffset
+            print(f"just split {r}/{c}")
+        r += frameOffset
+        c = 0
     return films
 
 
-def analyseDay(day: dt.date):
-    films = splitDay(day)
-    for row in films:
-        for film in row: 
-            pass
+def hatStarkregen(series: List[Frame], time: dt.datetime) -> bool:
+    """
+    Starkregen	
+    15 bis 25 l/m² in 1 Stunde
+    20 bis 35 l/m² in 6 Stunden
+    """
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=6)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=1)
+    lastHour = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    lastHourSum = np.sum([el.data for el in lastHour], axis=0)
+    
+    shortTerm = (25.0 >= np.max(lastHourSum) >= 15.0)
+    longTerm = (35.0 >= np.max(sixHourSum) >= 20.0)
+    if (shortTerm or longTerm):
+        print(f"frame {lastHour[-1].getId()} hat starkregen")
+    return (shortTerm or longTerm)
+
+
+def hatHeftigerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
+    """
+    25 bis 40 l/m² in 1 Stunde
+    35 bis 60 l/m² in 6 Stunden
+    """
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=6)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=1)
+    lastHour = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    lastHourSum = np.sum([el.data for el in lastHour], axis=0)
+    
+    shortTerm = (40.0 >= np.max(lastHourSum) > 25.0)
+    longTerm = (60.0 >= np.max(sixHourSum) > 35.0)
+    if (shortTerm or longTerm):
+        print(f"frame {time} bei {lastHour[-1].getId()} hat heftigen starkregen")
+    return (shortTerm or longTerm)
+
+
+def hatExtremerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
+    """
+    > 40 l/m² in 1 Stunde
+    > 60 l/m² in 6 Stunden
+    """
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=6)
+    lastSixHours = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    sixHourSum = np.sum([el.data for el in lastSixHours], axis=0)
+    
+    toTime = time
+    fromTime = time - dt.timedelta(hours=1)
+    lastHour = list(filter(lambda el: (fromTime <= el.time <= toTime), series))
+    lastHourSum = np.sum([el.data for el in lastHour], axis=0)
+    
+    shortTerm = (np.max(lastHourSum) >= 40.0)
+    longTerm = (np.max(sixHourSum) >= 60.0)
+    if (shortTerm or longTerm):
+        print(f"frame {lastHour[-1].getId()} hat extremen starkregen")
+    return (shortTerm or longTerm)
+
+
+def analyseFilm(film: Film):
+    for frame in film.frames:
+        time = frame.time
+        hatSr = hatStarkregen(film.frames, time)
+        hatHeftigerSr = hatHeftigerStarkregen(film.frames, time)
+        hatExtremerSr = hatExtremerStarkregen(film.frames, time)
+        frame.labels = {
+            "hatStarkregen": hatSr, 
+            "hatHeftigerSr": hatHeftigerSr, 
+            "hatExtremerSr": hatExtremerSr
+        }
+
+
+def filterStorms(film: Film, threshold) -> List[Film]:
+    storms: List[Film] = []
+    ongoing = False
+    for frame in film.frames:
+        if np.max(frame.data) > threshold:
+            if not ongoing:
+                ongoing = True
+                storm = Film([frame])
+                storms.append(storm)
+            else:
+                storm.append(frame)
+        else:
+            ongoing = False
+    return storms
+
+
+def analyseDay(date: dt.datetime):
+    print(f"splitting day {date}")
+    films = splitDay(date)
+    storms: List[Film] = []
+    for film in films: 
+        storms += filterStorms(film, 0.01)
+    for storm in storms:
+        analyseFilm(storm)
+    return storms
+
+
+def appendStormsToFile(fileName, storms):
+    with h5.File(fileName, 'a') as fileHandle:
+        for storm in storms:
+            groupName = storm.getId()
+            print(f"saving storm {groupName}")
+            group = fileHandle.create_group(groupName)
+            fromTime, toTime = storm.getTimeRange()
+            group.attrs["fromTime"] = fromTime.timestamp()
+            group.attrs["toTime"] = toTime.timestamp()
+            group.attrs["tlIndx"] = storm.frames[0].tlIndx
+            for key in storm.frames[0].attrs:
+                group.attrs[f"attrs_{key}"] = str(storm.frames[0].attrs[key])
+            for frame in storm.frames:
+                dsetName = frame.getId()
+                dset = fileHandle.create_dataset(f"{groupName}/{dsetName}", data=frame.data)
+                dset.attrs["time"] = frame.time.timestamp()
+                for key in frame.labels:
+                    dset.attrs[f"labels_{key}"] = str(frame.labels[key])
+
+
+def analyseAndSaveTimeRange(fromTime, toTime, fileName):
+    time = fromTime
+    while time < toTime:
+        storms = analyseDay(time)
+        appendStormsToFile(fileName, storms)
+        time += dt.timedelta(days=1)
+
+
+def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> List[Film]:
+    storms = []
+    i = 0
+    with h5.File(fileName, 'r') as f:
+        print("getting {} storms out of {} available".format(nrSamples, len(f.keys())))
+        for groupName in f.keys():
+            group = f[groupName]
+            fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
+            tlIndx = group.attrs["tlIndx"]
+            frames = []
+            for dsetName in group.keys():
+                dset = group[dsetName]
+                time = dt.datetime.fromtimestamp(dset.attrs["time"])
+                data = np.array(dset)
+                labels = {
+                    "hatStarkregen": bool(dset.attrs["labels_hatStarkregen"]), 
+                    "hatHeftigerSr": bool(dset.attrs["labels_hatHeftigerSr"]), 
+                    "hatExtremerSr": bool(dset.attrs["labels_hatExtremerSr"])
+                }
+                frame = Frame(data, {'datetime': time}, tlIndx)
+                frame.labels = labels
+                frames.append(frame)
+            if len(frames) >= minLength: 
+                storm = Film(frames)
+                storms.append(storm)
+                i += 1
+            if i >= nrSamples:
+                break
+    return storms
+
+
+def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
+
+    Tstorm = len(storm.frames)
+    H, W = storm.frames[0].data.shape
+    outData = np.zeros((T, H, W, 1))
+
+    if T >= Tstorm:
+        offset = T - Tstorm
+        for t in range(Tstorm):
+            outData[t + offset, :, :, 0] = storm.frames[t].data
+    else:
+        offset = Tstorm - T
+        for t in range(T):
+            outData[t, :, :, 0] = storm.frames[t + offset].data
+
+    outLabels = [int(val) for val in storm.frames[-1].labels.values()]
+
+    return outData, outLabels
+
+
+def loadTfData(fileName, T, maxSamples):
+    storms = loadStormsFromFile(fileName, maxSamples, 4)
+    dataList = []
+    labelList = []
+    for storm in storms: 
+        print(f"{storm.getId()} being translated to numpy ...")
+        data, label = stormToNp(storm, T)
+        dataList.append(data)
+        labelList.append(label)
+    return dataList, labelList
+
+
+if __name__ == '__main__':
+    #os.remove("test.h5")
+    fromTime = dt.date(2016, 5, 30)
+    toTime = dt.date(2016, 6, 3)
+    #analyseAndSaveTimeRange(fromTime, toTime, "test.h5")
+    dataL, labelL = loadTfData("test_0.h5", int(5 * 60/5), 100)
+    p.movie(dataL[60], labelL[60], 15)

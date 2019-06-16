@@ -4,7 +4,7 @@
 
 import numpy as np
 import tensorflow.keras as k
-import radarData as rd
+import radarData2 as rd
 import datetime as dt
 import time as t
 import matplotlib.pyplot as plt
@@ -15,15 +15,15 @@ thisDir = os.path.dirname(os.path.abspath(__file__))
 tfDataDir = thisDir + "/tfData/"
 
 batchSize = 4
-timeSteps = 15
-imageSize = 81
+timeSteps = int(5 * 60/5)
+imageSize = 100
 imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
 
 #rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
-inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 10000, timeSteps)
-
+#inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 10000, timeSteps)
+inpt_training, outpt_training = rd.loadTfData("test_0.h5", timeSteps, 50)
 
 model = k.models.Sequential([
     k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
