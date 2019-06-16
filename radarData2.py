@@ -337,7 +337,7 @@ def loadTfData(fileName, T, maxSamples):
         data, label = stormToNp(storm, T)
         dataList.append(data)
         labelList.append(label)
-    return dataList, labelList
+    return np.array(dataList), np.array(labelList)
 
 
 if __name__ == '__main__':
