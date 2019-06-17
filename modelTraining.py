@@ -21,10 +21,9 @@ imageWidth = imageSize
 imageHeight = imageSize
 channels = 1
 
-#rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
-#inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 10000, timeSteps)
-inpt_training, outpt_training = rd.loadTfData("training_2016.h5", timeSteps, 50)
-print(f"input: {np.sum(inpt_training, axis=0)}")
+
+inpt_training, outpt_training = rd.loadTfData("training_2016.h5", timeSteps, 100)
+print(f"input: {np.sum(outpt_training, axis=0)}")
 
 
 model = k.models.Sequential([
@@ -32,20 +31,16 @@ model = k.models.Sequential([
     k.layers.MaxPool3D(),
     k.layers.Conv3D(5, (2,2,2), name="conv2"),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(5, (2,2,2), name="conv3"),
-    k.layers.MaxPool3D(),
     k.layers.Flatten(),
     k.layers.Dense(33, name="dense1", activation=k.activations.sigmoid),
-    k.layers.Dense(20, name="dense2", activation=k.activations.sigmoid),
-    k.layers.Dense(20, name="dense3", activation=k.activations.sigmoid),
-    k.layers.Dense(10, name="dense4", activation=k.activations.sigmoid),
-    k.layers.Dense(3, name="dense5", activation=k.activations.sigmoid)
+    k.layers.Dense(15, name="dense2", activation=k.activations.sigmoid),
+    k.layers.Dense(3, name="dense5", activation=k.activations.softmax)
 ])
 
 
 model.compile(
-    optimizer=k.optimizers.RMSprop(lr=0.05),
-    loss=k.losses.binary_crossentropy
+    optimizer=k.optimizers.SGD(lr=0.05, clipvalue=0.5),
+    loss=k.losses.categorical_crossentropy
 )
 
 print(model.summary())
@@ -105,8 +100,8 @@ history = model.fit(
     x=inpt_training, 
     y=outpt_training, 
     validation_split=0.1, 
-    batch_size=10, 
-    epochs=10, 
+    batch_size=3, 
+    epochs=20, 
     callbacks=[modelSaver, tensorBoard, customPlotCallback]
 )
 
@@ -118,3 +113,13 @@ if not os.path.exists(resultDir):
 model.save("{}/simpleRadPredModel.h5".format(resultDir))
 model.save("{}/latestRadPredModel.h5".format(tfDataDir))
 createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])
+
+
+
+dataIn, dataOut = rd.loadTfData("training_2016.h5", int(5 * 60/5), 20)
+prediction = model.predict(dataIn)
+
+for r, row in enumerate(prediction):
+    print("----{}----".format(r))
+    print("Pred: {}".format(row))
+    print("Act:  {}".format(dataOut[r]))

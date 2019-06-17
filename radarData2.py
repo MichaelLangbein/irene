@@ -326,6 +326,13 @@ def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> Lis
     return storms
 
 
+def hat(storm: Film, label: str):
+    for frame in storm.frames:
+        if frame.labels[label]:
+            return True
+    return False
+
+
 def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
 
     Tstorm = len(storm.frames)
@@ -340,8 +347,15 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
         offset = Tstorm - T
         for t in range(T):
             outData[t, :, :, 0] = storm.frames[t + offset].data
-
-    outLabels = [int(val) for val in storm.frames[-1].labels.values()]
+    
+    outLabels = [0, 0, 0]
+    if hat(storm, "hatExtremerSr"):
+        outLabels = [0, 0, 1]
+    elif hat(storm, "hatHeftigerSr"):
+        outLabels = [0, 1, 0]
+    elif hat(storm, "hatStarkregen"):
+        outLabels = [1, 0, 0]
+    #outLabels = [int(val) for val in storm.frames[-1].labels.values()]
 
     return outData, outLabels
 
