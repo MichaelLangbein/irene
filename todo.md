@@ -1,5 +1,3 @@
-hmm. all frames are zero ...
-
 
 
 My model is just learning the mean occurrence prob of each class!

@@ -23,7 +23,7 @@ channels = 1
 
 #rd.getAnalyseAndSaveStorms("processedData/training.hdf5", dt.datetime(2016, 4, 1), dt.datetime(2016, 10, 30), imageSize)
 #inpt_training, outpt_training = rd.npStormsFromFile("processedData/training.hdf5", 10000, timeSteps)
-inpt_training, outpt_training = rd.loadTfData("test_0.h5", timeSteps, 50)
+inpt_training, outpt_training = rd.loadTfData("test.h5", timeSteps, 50)
 
 model = k.models.Sequential([
     k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
