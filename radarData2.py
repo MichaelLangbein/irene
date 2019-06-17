@@ -351,14 +351,14 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
         for t in range(T):
             outData[t, :, :, 0] = storm.frames[t + offset].data
     
-    outLabels = [0, 0, 0]
     if hat(storm, "hatExtremerSr"):
-        outLabels = [0, 0, 1]
+        outLabels = [0, 0, 0, 1]
     elif hat(storm, "hatHeftigerSr"):
-        outLabels = [0, 1, 0]
+        outLabels = [0, 0, 1, 0]
     elif hat(storm, "hatStarkregen"):
-        outLabels = [1, 0, 0]
-    #outLabels = [int(val) for val in storm.frames[-1].labels.values()]
+        outLabels = [0, 1, 0, 0]
+    else: 
+        outLabels = [1, 0, 0, 0]
 
     return outData, outLabels
 

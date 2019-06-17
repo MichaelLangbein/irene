@@ -43,7 +43,7 @@ model = k.models.Sequential([
     k.layers.Dropout(0.2),
     k.layers.Dense(15, name="dense2", activation=k.activations.sigmoid),
     k.layers.Dropout(0.2),
-    k.layers.Dense(3, name="dense3", activation=k.activations.softmax)
+    k.layers.Dense(4, name="dense3", activation=k.activations.softmax)
 ])
 
 
