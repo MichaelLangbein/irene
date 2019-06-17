@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import random as rdm
 import datetime as dt
 import wradlib as wrl
 import matplotlib.pyplot as plt
@@ -268,6 +269,7 @@ def worthSaving(storm) -> bool:
 
 def appendStormsToFile(fileName, storms):
     with h5.File(fileName, 'a') as fileHandle:
+        rdm.shuffle(storms) # <--- if we dont do this, small storms will be in the beginning and large ones at the end, because we only save one or two days at a time. If we then only load half the dataset, we train the net only with small storms. 
         for storm in storms:
             groupName = storm.getId()
             print(f"saving storm {groupName}")
@@ -301,6 +303,7 @@ def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> Lis
     with h5.File(fileName, 'r') as f:
         print(f"getting {nrSamples} storms out of {len(f.keys())} available")
         for groupName in f.keys():
+            print(f"loading {groupName}")
             group = f[groupName]
             fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
             tlIndx = tuple(group.attrs["tlIndx"])
@@ -401,11 +404,11 @@ if __name__ == '__main__':
     # fileName = "test.h5"
     # if os.path.isfile(fileName):
     #     os.remove(fileName)
-    # fromTime = dt.date(2016, 6, 1)
-    # toTime = dt.date(2016, 6, 2)
-    #analyseAndSaveTimeRange(fromTime, toTime, fileName)
-    #redoAnalysis("test_all_labeled_1.h5")
+    fromTime = dt.date(2016, 6, 1)
+    toTime = dt.date(2016, 6, 5)
+    analyseAndSaveTimeRange(fromTime, toTime, "training_2016.h5")
+    #redoAnalysis("validation_2016.h5")
     dataL, labelL = loadTfData("training_2016.h5", int(5 * 60/5), 100)
     print(f"labels: {np.sum(labelL, axis=0)}")
-    for indx in range(7):
+    for indx in range(2):
         p.movie(dataL[indx, :, :, :, 0], labelL[indx], 15)

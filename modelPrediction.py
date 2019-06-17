@@ -11,11 +11,12 @@ modelName = "latestRadPredModel.h5"
 
 
 model = k.models.load_model(tfDataDir + modelName)
-dataIn, dataOut = rd.loadTfData("training_2016.h5", int(5 * 60/5), 5)
+dataIn, dataOut = rd.loadTfData("validation_2016.h5", int(5 * 60/5), 100)
 prediction = model.predict(dataIn)
 
 for r, row in enumerate(prediction):
     print("----{}----".format(r))
     print("Pred: {}".format(row))
     print("Act:  {}".format(dataOut[r]))
-    movie(dataIn[r, :, :, :, 0], dataOut[r], 15)
+    if dataOut[r][2] == 1:
+        movie(dataIn[r, :, :, :, 0], dataOut[r], 15)

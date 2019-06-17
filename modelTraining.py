@@ -1,6 +1,10 @@
-# ConvNet
-# Takes series of radar-images as input 
-# Predicts the categorisation of the next radar-image
+"""
+ConvNet
+Takes series of radar-images as input 
+Predicts the categorisation of the next radar-image
+
+using simple SGD optimizer because of https://arxiv.org/pdf/1705.08292.pdf
+"""
 
 import numpy as np
 import tensorflow.keras as k
@@ -22,19 +26,24 @@ imageHeight = imageSize
 channels = 1
 
 
-inpt_training, outpt_training = rd.loadTfData("training_2016.h5", timeSteps, 100)
+inpt_training, outpt_training = rd.loadTfData("training_2016.h5", timeSteps, 200)
+inpt_validation, outpt_validation = rd.loadTfData("validation_2016.h5", timeSteps, 50)
 print(f"input: {np.sum(outpt_training, axis=0)}")
 
 
 model = k.models.Sequential([
     k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
+    k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
     k.layers.Conv3D(5, (2,2,2), name="conv2"),
+    k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
     k.layers.Flatten(),
     k.layers.Dense(33, name="dense1", activation=k.activations.sigmoid),
+    k.layers.Dropout(0.2),
     k.layers.Dense(15, name="dense2", activation=k.activations.sigmoid),
-    k.layers.Dense(3, name="dense5", activation=k.activations.softmax)
+    k.layers.Dropout(0.2),
+    k.layers.Dense(3, name="dense3", activation=k.activations.softmax)
 ])
 
 
@@ -86,22 +95,13 @@ class CustomPlotCallback(k.callbacks.Callback):
 customPlotCallback = CustomPlotCallback()
 
 
-
-# history = model.fit_generator(
-#     generator=trainingGenerator,
-#     steps_per_epoch=25,       # number of batches to be drawn from generator
-#     epochs=10,                 # number of times the data is repeated
-#     validation_data=validationGenerator,
-#     validation_steps=5,       # number of batches to be drawn from generator
-#     callbacks=[modelSaver, tensorBoard, customPlotCallback] 
-# )
-
 history = model.fit(
     x=inpt_training, 
     y=outpt_training, 
-    validation_split=0.1, 
+    #validation_split=0.1, 
+    validation_data=(inpt_validation, outpt_validation),
     batch_size=3, 
-    epochs=20, 
+    epochs=8, 
     callbacks=[modelSaver, tensorBoard, customPlotCallback]
 )
 
@@ -116,7 +116,7 @@ createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history
 
 
 
-dataIn, dataOut = rd.loadTfData("training_2016.h5", int(5 * 60/5), 20)
+dataIn, dataOut = rd.loadTfData("validation_2016.h5", int(5 * 60/5), 20)
 prediction = model.predict(dataIn)
 
 for r, row in enumerate(prediction):
