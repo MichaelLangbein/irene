@@ -161,7 +161,7 @@ def hatStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (25.0 >= np.max(lastHourSum) >= 15.0)
     longTerm = (35.0 >= np.max(sixHourSum) >= 20.0)
     if (shortTerm or longTerm):
-        print(f"frame {lastHour[-1].getId()} hat starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()}/6h")
+        print(f"{lastHour[-1].getId()} hat starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -184,7 +184,7 @@ def hatHeftigerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (40.0 >= np.max(lastHourSum) > 25.0)
     longTerm = (60.0 >= np.max(sixHourSum) > 35.0)
     if (shortTerm or longTerm):
-        print(f"{lastHour[-1].getId()} hat heftigen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()}/6h")
+        print(f"{lastHour[-1].getId()} hat heftigen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -207,7 +207,7 @@ def hatExtremerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (np.max(lastHourSum) >= 40.0)
     longTerm = (np.max(sixHourSum) >= 60.0)
     if (shortTerm or longTerm):
-        print(f"{lastHour[-1].getId()} hat extremen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()}/6h")
+        print(f"{lastHour[-1].getId()} hat extremen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -245,10 +245,25 @@ def analyseDay(date: dt.datetime):
     films = splitDay(date)
     storms: List[Film] = []
     for film in films: 
-        storms += filterStorms(film, 0.01)
+        storms += filterStorms(film, 0.1)
     for storm in storms:
         analyseFilm(storm)
-    return storms
+    stormsFltr: List[Film] = []
+    for storm in storms:
+        if worthSaving(storm):
+            stormsFltr.append(storm)
+    return stormsFltr
+
+
+def worthSaving(storm) -> bool:
+    for frame in storm.frames:
+        if frame.labels["hatStarkregen"] or frame.labels["hatHeftigerSr"] or frame.labels["hatExtremerSr"]:
+            return True
+    else:
+        if np.random.rand() > 0.95:
+            return True
+    print(f"storm {storm.getId()} not worth saving")
+    return False
 
 
 def appendStormsToFile(fileName, storms):
@@ -369,13 +384,14 @@ def redoAnalysis(fileName: str):
 
 
 if __name__ == '__main__':
-    if os.path.isfile("test.h5"):
-        os.remove("test.h5")
-    fromTime = dt.date(2016, 6, 2)
-    toTime = dt.date(2016, 6, 3)
-    #alyseAndSaveTimeRange(fromTime, toTime, "test.h5")
-    redoAnalysis("test_all_labeled_1.h5")
-    dataL, labelL = loadTfData("test_all_labeled_1.h5", int(5 * 60/5), 100)
+    # fileName = "test.h5"
+    # if os.path.isfile(fileName):
+    #     os.remove(fileName)
+    # fromTime = dt.date(2016, 6, 1)
+    # toTime = dt.date(2016, 6, 2)
+    #analyseAndSaveTimeRange(fromTime, toTime, fileName)
+    #redoAnalysis("test_all_labeled_1.h5")
+    dataL, labelL = loadTfData("training_2016.h5", int(5 * 60/5), 100)
     print(f"labels: {np.sum(labelL, axis=0)}")
-    indx = 7
-    p.movie(dataL[indx, :, :, :, 0], labelL[indx], 15)
+    for indx in range(7):
+        p.movie(dataL[indx, :, :, :, 0], labelL[indx], 15)

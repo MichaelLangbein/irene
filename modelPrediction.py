@@ -11,7 +11,7 @@ modelName = "latestRadPredModel.h5"
 
 
 model = k.models.load_model(tfDataDir + modelName)
-dataIn, dataOut = rd.loadTfData("test_0.h5", int(5 * 60/5), 5)
+dataIn, dataOut = rd.loadTfData("training_2016.h5", int(5 * 60/5), 5)
 prediction = model.predict(dataIn)
 
 for r, row in enumerate(prediction):
