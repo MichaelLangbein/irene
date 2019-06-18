@@ -1,4 +1,17 @@
 
+storms labeled by globally worst
+        small model 
+                overfits ... 1560834294
+        reasonable model 
+                overfits ... 1560804002 
+        large model
+                converges to mean ... 1560834525
+        pretrained net
+        twobranch-net: one conv-branch and one label-GRU-branch
+storms split by sliding window, labeled by last
+
+
+
 modelData is stored in h5 in order. 
 Need to shuffle that through  - otherwise I only train model on early mornings storms, not on evenings storms
 
