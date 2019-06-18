@@ -10,12 +10,12 @@ import numpy as np
 import tensorflow.keras as k
 import radarData2 as rd
 import datetime as dt
-import time as t
-import matplotlib.pyplot as plt
+import time
+import plotting as p
 import os
 
 
-thisDir = os.path.dirname(os.path.abspath(__file__))
+thisDir = os.path.abspath('')
 tfDataDir = thisDir + "/tfData/"
 
 batchSize = 4
@@ -28,16 +28,20 @@ channels = 1
 
 inpt_training, outpt_training = rd.loadTfData("training_2016.h5", timeSteps, 200)
 inpt_validation, outpt_validation = rd.loadTfData("validation_2016.h5", timeSteps, 50)
-print(f"input: {np.sum(outpt_training, axis=0)}")
 
 
 model = k.models.Sequential([
-    k.layers.Conv3D(5, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
+    k.layers.Conv3D(1, (2,2,2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(5, (2,2,2), name="conv2"),
+    k.layers.Conv3D(1, (2,2,2), name="conv2"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
+    k.layers.Conv3D(1, (2,2,2), name="conv3"),
+    k.layers.Dropout(0.2),
+    k.layers.MaxPool3D(),
+    # k.layers.Reshape((6, 121)),
+    # k.layers.GRU(20, name="gru1"),
     k.layers.Flatten(),
     k.layers.Dense(33, name="dense1", activation=k.activations.sigmoid),
     k.layers.Dropout(0.2),
@@ -72,14 +76,6 @@ tensorBoard = k.callbacks.TensorBoard(
 )
 
 
-def createLossPlot(filePath, loss, vloss):
-    plt.plot(loss)
-    plt.plot(vloss)
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper right')
-    plt.savefig(filePath)
 
 
 class CustomPlotCallback(k.callbacks.Callback):
@@ -89,7 +85,7 @@ class CustomPlotCallback(k.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.losses.append(logs["loss"])
         self.vlosses.append(logs["val_loss"])
-        createLossPlot(tfDataDir + "/" + "loss.png", self.losses, self.vlosses)
+        p.createLossPlot(tfDataDir + "/" + "loss.png", self.losses, self.vlosses)
         
 
 customPlotCallback = CustomPlotCallback()
@@ -106,13 +102,13 @@ history = model.fit(
 )
 
 
-tstp = int(t.time())
+tstp = int(time.time())
 resultDir = "{}{}".format(tfDataDir, tstp)
 if not os.path.exists(resultDir):
     os.makedirs(resultDir)
 model.save("{}/simpleRadPredModel.h5".format(resultDir))
 model.save("{}/latestRadPredModel.h5".format(tfDataDir))
-createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])
+p.createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])
 
 
 
