@@ -1,3 +1,6 @@
+try to predict with simple two layer fully connected. 
+try with a lot more imput data
+
 
 modelData is stored in h5 in order. 
 Need to shuffle that through  - otherwise I only train model on early mornings storms, not on evenings storms
