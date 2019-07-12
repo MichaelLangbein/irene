@@ -1,10 +1,14 @@
 import os
+from os import listdir
+from os.path import isfile, join
 import numpy as np
 import random as rdm
 import datetime as dt
 import wradlib as wrl
 import matplotlib.pyplot as plt
 import h5py as h5
+import concurrent.futures
+import tensorflow.keras as k
 import plotting as p
 from typing import List, Tuple, Union, Optional
 
@@ -15,6 +19,13 @@ from typing import List, Tuple, Union, Optional
     units: https://www.dwd.de/DE/leistungen/radolan/produktuebersicht/radolan_produktuebersicht_pdf.pdf?__blob=publicationFile&v=6
     format: https://www.dwd.de/DE/leistungen/radarklimatologie/radklim_kompositformat_1_0.pdf?__blob=publicationFile&v=1
 """
+
+
+rawDataDir = os.getcwd() + "/rawData"
+processedDataDir = os.getcwd() + "/processedData"
+frameHeight = frameWidth = frameLength = 100
+frameOffset = 50
+
 
 
 class Frame:
@@ -76,15 +87,24 @@ class Film:
         tlIndx = self.frames[0].tlIndx
         return f"storm_{tlIndx}_{fromTime}_{toTime}"
 
+    @staticmethod
+    def parseId(filename: str):
+        stormname = filename.strip(".h5")
+        parts = stormname.split("_")
+        if len(parts) < 3 or parts[0] != "storm":
+             return None, None, None
+        tlIndx = parts[1]
+        fromTime = dt.datetime.strptime(parts[2], "%Y-%m-%d %H:%M:%S")
+        toTime = dt.datetime.strptime(parts[3], "%Y-%m-%d %H:%M:%S")
+        return tlIndx, fromTime, toTime
 
-def getRadarFileName(date: dt.datetime) -> str: 
-    thisDir = os.path.abspath('')
+
+def getRadarFileName(date: dt.datetime) -> str:
     monthString = date.strftime("%Y%m")
     dayString = date.strftime("%Y%m%d")
     hourString = date.strftime("%H%M")
     ydhString = date.strftime("%y%m%d%H%M")
-    fullPath = "{dir}/rawData2/YW2017.002_{month}/YW2017.002_{day}/raa01-yw2017.002_10000-{ydh}-dwd---bin".format(
-        **{"month": monthString, "day": dayString, "hour": hourString, "ydh": ydhString, "dir": thisDir})
+    fullPath = f"{rawDataDir}/YW2017.002_{monthString}/YW2017.002_{dayString}/raa01-yw2017.002_10000-{ydhString}-dwd---bin"
     return fullPath
 
 
@@ -121,8 +141,6 @@ def splitDay(date: dt.date):
     print(f"reading and splitting day {date}")
     frames = getDayFrames(date)
     H, W = frames[0].data.shape
-    frameHeight = frameWidth = frameLength = 100
-    frameOffset = 50
     r = 0
     c = 0
     films: List[Film] = []
@@ -223,7 +241,7 @@ def analyseFilm(film: Film):
         }
 
 
-def filterStorms(film: Film, threshold) -> List[Film]:
+def extractStorms(film: Film, threshold) -> List[Film]:
     storms: List[Film] = []
     ongoing = False
     for frame in film.frames:
@@ -240,11 +258,11 @@ def filterStorms(film: Film, threshold) -> List[Film]:
 
 
 def analyseDay(date: dt.datetime):
-    print(f"splitting day {date}")
+    print(f"analysing day {date}")
     films = splitDay(date)
     storms: List[Film] = []
     for film in films:
-        storms += filterStorms(film, 0.1)
+        storms += extractStorms(film, 0.1)
     for storm in storms:
         analyseFilm(storm)
     stormsFltr: List[Film] = []
@@ -265,40 +283,28 @@ def worthSaving(storm) -> bool:
     return False
 
 
-def appendStormsToFile(fileName, storms):
-    with h5.File(fileName, 'a') as fileHandle:
-        for storm in storms:
-            groupName = storm.getId()
-            print(f"saving storm {groupName}")
-            group = fileHandle.create_group(groupName)
-            fromTime, toTime = storm.getTimeRange()
-            group.attrs["fromTime"] = fromTime.timestamp()
-            group.attrs["toTime"] = toTime.timestamp()
-            group.attrs["tlIndx"] = storm.frames[0].tlIndx
-            for key in storm.frames[0].attrs:
-                group.attrs[f"attrs_{key}"] = str(storm.frames[0].attrs[key])
-            for frame in storm.frames:
-                dsetName = frame.getId()
-                dset = fileHandle.create_dataset(f"{groupName}/{dsetName}", data=frame.data)
-                dset.attrs["time"] = frame.time.timestamp()
-                dset.attrs["hatStarkregen"] = frame.labels["hatStarkregen"]
-                dset.attrs["hatHeftigerSr"] = frame.labels["hatHeftigerSr"]
-                dset.attrs["hatExtremerSr"] = frame.labels["hatExtremerSr"]
+def saveStormToFile(storm):
+    filename = f"{processedDataDir}/{storm.getId()}.h5"
+    print(f"saving storm to file {filename}")
+    with h5.File(fileName, 'w') as fileHandle:
+        groupName = storm.getId()
+        fromTime, toTime = storm.getTimeRange()
+        group.attrs["fromTime"] = fromTime.timestamp()
+        group.attrs["toTime"] = toTime.timestamp()
+        group.attrs["tlIndx"] = storm.frames[0].tlIndx
+        for key in storm.frames[0].attrs:
+            group.attrs[f"attrs_{key}"] = str(storm.frames[0].attrs[key])
+        for frame in storm.frames:
+            dsetName = frame.getId()
+            dset = fileHandle.create_dataset(f"{groupName}/{dsetName}", data=frame.data)
+            dset.attrs["time"] = frame.time.timestamp()
+            dset.attrs["hatStarkregen"] = frame.labels["hatStarkregen"]
+            dset.attrs["hatHeftigerSr"] = frame.labels["hatHeftigerSr"]
+            dset.attrs["hatExtremerSr"] = frame.labels["hatExtremerSr"]
 
 
-def analyseAndSaveTimeRange(fromTime, toTime, fileName):
-    time = fromTime
-    while time < toTime:
-        storms = analyseDay(time)
-        appendStormsToFile(fileName, storms)
-        time += dt.timedelta(days=1)
-
-
-def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> List[Film]:
-    storms = []
-    i = 0
+def loadStormFromFile(fileName: str) -> Film:
     with h5.File(fileName, 'r') as f:
-        print(f"getting {nrSamples} storms out of {len(f.keys())} available")
         for groupName in f.keys():
             group = f[groupName]
             fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
@@ -316,46 +322,33 @@ def loadStormsFromFile(fileName: str, nrSamples: int, minLength: int = 1) -> Lis
                 frame = Frame(data, {'datetime': time}, tlIndx)
                 frame.labels = labels
                 frames.append(frame)
-            if len(frames) >= minLength:
                 storm = Film(frames)
-                storms.append(storm)
-                i += 1
-            if i >= nrSamples:
-                break
-    return storms
-
-
-def loadStormFromFile(fileName: str, stormName: str) -> Film:
-    with h5.File(fileName, 'r') as f:
-        group = f[stormName]
-        fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
-        tlIndx = tuple(group.attrs["tlIndx"])
-        frames = []
-        for dsetName in group.keys():
-            dset = group[dsetName]
-            time = dt.datetime.fromtimestamp(dset.attrs["time"])
-            data = np.array(dset)
-            labels = {
-                "hatStarkregen": dset.attrs["hatStarkregen"],
-                "hatHeftigerSr": dset.attrs["hatHeftigerSr"],
-                "hatExtremerSr": dset.attrs["hatExtremerSr"]
-            }
-            frame = Frame(data, {'datetime': time}, tlIndx)
-            frame.labels = labels
-            frames.append(frame)
-        storm = Film(frames)
     return storm
 
 
-def getStormNames(fileName):
-    names = []
-    with h5.File(fileName, 'r') as f:
-        for groupName in f.keys():
-            names.push(groupName)
-    return names
+
+def analyseAndSaveDay(date):
+    print(f"analysing and saving day {date}")
+    storms = analyseDay(date)
+    for storm in storms: 
+        saveStormToFile(storm)
 
 
-def hat(storm: Film, label: str):
+def analyseAndSaveTimeRange(fromTime, toTime):
+    
+    # get days to work with
+    days = []
+    time = fromTime
+    while time < toTime:
+        days.append(time)
+        time += dt.timedelta(days=1)
+    
+    # execute in threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        executor.map(analyseAndSaveDay, days)
+
+
+def stormHasLabel(storm: Film, label: str):
     for frame in storm.frames:
         if frame.labels[label]:
             return True
@@ -377,11 +370,11 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
         for t in range(T):
             outData[t, :, :, 0] = storm.frames[t + offset].data
 
-    if hat(storm, "hatExtremerSr"):
+    if stormHasLabel(storm, "hatExtremerSr"):
         outLabels = [0, 0, 0, 1]
-    elif hat(storm, "hatHeftigerSr"):
+    elif stormHasLabel(storm, "hatHeftigerSr"):
         outLabels = [0, 0, 1, 0]
-    elif hat(storm, "hatStarkregen"):
+    elif stormHasLabel(storm, "hatStarkregen"):
         outLabels = [0, 1, 0, 0]
     else:
         outLabels = [1, 0, 0, 0]
@@ -389,58 +382,53 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
     return outData, outLabels
 
 
-def tfDataGenerator(fileName, batchSize, T, shuffle=True):
-    stormNames = getStormNames(fileName)
-    if shuffle:
-        rdm.shuffle(stormNames)
-    i = 0
-    while True:
-        dataList = []
-        labelList = []
-        for s in range(batchSize):
-            storm = loadStormFromFile(fileName, stormNames[i * batchSize + s], 4)
-            data, label = stormToNp(storm, T)
-            dataList.append(data)
-            labelList.append(label)
-        i += 1
-        yield np.array(dataList), np.array(labelList)
+class DataGenerator(k.utils.Sequence):
+    def __init__(self, dataDir, startDate, endDate, batchSize, timeseriesLength):
+        self.dataDir = dataDir
+        self.startDate = startDate
+        self.endDate = endDate
+        self.batchSize = batchSize
+        self.timeseriesLength = timeseriesLength
+        self.fileNames = self.getFileNames(dataDir, startDate, endDate)
+        self.shuffleFileOrder()
 
+    def __len__(self):
+        return int(np.floor(len(self.fileNames) / self.batchSize))
 
-def redoAnalysis(fileName: str):
-    with h5.File(fileName, 'a') as f:
-        for groupName in f.keys():
-            group = f[groupName]
-            fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
-            tlIndx = tuple(group.attrs["tlIndx"])
-            frames = []
-            for dsetName in group.keys():
-                dset = group[dsetName]
-                time = dt.datetime.fromtimestamp(dset.attrs["time"])
-                data = np.array(dset)
-                frame = Frame(data, {'datetime': time}, tlIndx)
-                frames.append(frame)
-            film = Film(frames)
-            analyseFilm(film)
-            for frame in film.frames:
-                frameId = frame.getId()
-                dset = group[frameId]
-                dset.attrs["hatStarkregen"] = frame.labels["hatStarkregen"]
-                dset.attrs["hatHeftigerSr"] = frame.labels["hatHeftigerSr"]
-                dset.attrs["hatExtremerSr"] = frame.labels["hatExtremerSr"]
+    def __getitem__(self, batchNr):
+        fileNames = self.fileNames[batchNr * self.batchSize : (batchNr + 1) * self.batchSize]
+
+        dataPoints = np.zeros((self.batchSize, self.timeseriesLength, frameWidth, frameHeight, 1))
+        labels = np.zeros((self.batchSize, 4))
+
+        for bNr, fileName in enumerate(fileNames): 
+            storm = loadStormFromFile(fileName)
+            x, y = stormToNp(storm, self.timeseriesLength)
+            dataPoints[bNr, :, :, :, 0] = x
+            labels[bNr, :] = y
+        
+        return dataPoints, labels
+
+    def getFileNames(self, dataDir, startDate, endDate):
+        filteredNames = []
+        fileNames = [f for f in listdir(processedDataDir) if isfile(join(processedDataDir, f))]
+        for fileName in fileNames: 
+            tlIndx, fromTime, toTime = Film.parseId(fileName)
+            if tlIndx and fromTime and toTime:
+                if startDate < fromTime < endDate and startDate < toTime < endDate:
+                    filteredNames.append(processedDataDir + "/" + fileName)
+        return filteredNames
+
+    def shuffleFileOrder(self):
+        rdm.shuffle(self.fileNames)
+
 
 
 if __name__ == '__main__':
-    # fileName = "test.h5"
-    # if os.path.isfile(fileName):
-    #     os.remove(fileName)
-    fromTime = dt.date(2017, 7, 1)
-    toTime = dt.date(2017, 7, 30)
-    analyseAndSaveTimeRange(fromTime, toTime, "training_2017_0107_3007.h5")
     fromTime = dt.date(2016, 7, 1)
-    toTime = dt.date(2016, 7, 14)
-    analyseAndSaveTimeRange(fromTime, toTime, "validation_2016_0107_1407.h5")
-    # redoAnalysis("validation_2016.h5")
-    # dataL, labelL = loadTfData("training_2016.h5", int(5 * 60 / 5), 100)
-    # print(f"labels: {np.sum(labelL, axis=0)}")
-    # for indx in range(2):
-    #     p.movie(dataL[indx, :, :, :, 0], labelL[indx], 15)
+    toTime = dt.date(2016, 7, 30)
+    analyseAndSaveTimeRange(fromTime, toTime)
+    fromTime = dt.date(2016, 6, 1)
+    toTime = dt.date(2016, 6, 14)
+    analyseAndSaveTimeRange(fromTime, toTime)
+

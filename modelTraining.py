@@ -1,14 +1,7 @@
-"""
-ConvNet
-Takes series of radar-images as input 
-Predicts the categorisation of the next radar-image
-
-using simple SGD optimizer because of https://arxiv.org/pdf/1705.08292.pdf
-"""
-
 import numpy as np
 import tensorflow.keras as k
-import radarData2 as rd
+import data as rd
+from data import rawDataDir, processedDataDir, frameHeight, frameWidth, frameLength
 import datetime as dt
 import time
 import plotting as p
@@ -16,7 +9,8 @@ import os
 
 
 batchSize = 4
-nrTrainingSamples = 2000
+stepsPerEpoch = int(2000 / batchSize)
+validationSteps = int(200 / batchSize)
 nrValidationSamples = 50
 timeSteps = int(5 * 60 / 5)
 imageSize = 100
@@ -25,21 +19,21 @@ imageHeight = imageSize
 channels = 1
 
 
-inpt_training, outpt_training = rd.tfDataGenerator("training_2017_0107_3007.h5", timeSteps, nrTrainingSamples)
-inpt_validation, outpt_validation = rd.tfDataGenerator("validation_2016_0107_14_07.h5", timeSteps, nrValidationSamples)
+training_generator = rd.DataGenerator(processedDataDir, dt.date(2016, 6, 1), dt.date(2016, 6, 30), batchSize, timeSteps)
+validation_generator = rd.DataGenerator(processedDataDir, dt.date(2016, 7, 1), dt.date(2016, 7, 10), batchSize, timeSteps)
 
 
 model = k.models.Sequential([
-    k.layers.Conv3D(1, (2, 2, 2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
+    k.layers.Conv3D(5, (2, 2, 2), input_shape=(timeSteps, imageWidth, imageHeight, channels), name="conv1"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(1, (2, 2, 2), name="conv2"),
+    k.layers.Conv3D(15, (2, 2, 2), name="conv2"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(1, (2, 2, 2), name="conv3"),
+    k.layers.Conv3D(5, (2, 2, 2), name="conv3"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
-    k.layers.Conv3D(1, (2, 2, 2), name="conv4"),
+    k.layers.Conv3D(5, (2, 2, 2), name="conv4"),
     k.layers.Dropout(0.2),
     k.layers.MaxPool3D(),
     # k.layers.Reshape((6, 121)),
@@ -51,15 +45,6 @@ model = k.models.Sequential([
     k.layers.Dropout(0.2),
     k.layers.Dense(4, name="dense3", activation=k.activations.softmax)
 ])
-
-# model = k.models.Sequential([
-#     k.layers.Flatten(input_shape=(timeSteps, imageWidth, imageHeight, channels)),
-#     k.layers.Dense(33, name="dense1", activation=k.activations.sigmoid),
-#     k.layers.Dropout(0.2),
-#     k.layers.Dense(15, name="dense2", activation=k.activations.sigmoid),
-#     k.layers.Dropout(0.2),
-#     k.layers.Dense(4, name="dense3", activation=k.activations.softmax)
-# ])
 
 
 model.compile(
@@ -103,14 +88,14 @@ class CustomPlotCallback(k.callbacks.Callback):
 customPlotCallback = CustomPlotCallback()
 
 
-history = model.fit(
-    x=inpt_training,
-    y=outpt_training,
-    # validation_split=0.1,
-    validation_data=(inpt_validation, outpt_validation),
-    batch_size=3,
-    epochs=8,
-    callbacks=[modelSaver, tensorBoard, customPlotCallback]
+history = model.fit_generator(
+    training_generator, 
+    steps_per_epoch=stepsPerEpoch, 
+    epochs=8, 
+    verbose=2, 
+    callbacks=[modelSaver, tensorBoard, customPlotCallback], 
+    validation_data=validation_generator, 
+    validation_steps=validationSteps
 )
 
 
@@ -121,12 +106,3 @@ if not os.path.exists(resultDir):
 model.save("{}/simpleRadPredModel.h5".format(resultDir))
 model.save("{}/latestRadPredModel.h5".format(tfDataDir))
 p.createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])
-
-
-dataIn, dataOut = rd.loadTfData("validation_2016.h5", int(5 * 60 / 5), 20)
-prediction = model.predict(dataIn)
-
-for r, row in enumerate(prediction):
-    print("----{}----".format(r))
-    print("Pred: {}".format(row))
-    print("Act:  {}".format(dataOut[r]))

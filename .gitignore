@@ -1,7 +1,7 @@
 __pycache__
 config.py
 rawData/*
-rawData2/*
+processedData/*
 npyData/*
 .vscode
 .mypy_cache
