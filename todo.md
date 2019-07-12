@@ -1,3 +1,6 @@
+try to predict with simple two layer fully connected. 
+try with a lot more imput data
+
 
 storms labeled by globally worst
         small model 

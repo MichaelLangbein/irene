@@ -41,11 +41,11 @@ def getMaximallyActivatingImage(model, layerName: str, channelNr: int, imageDime
     return image[0]
 
 
-def plotActivations(model, dataIn, layerName):
+def plotActivations(model, inputSample, layerName):
 
     # We turn the one input into a batch of size one
-    T, H, W, C = dataIn.shape
-    dataIn = np.reshape(dataIn, (1, T, H, W, C))
+    T, H, W, C = inputSample.shape
+    inputSample = np.reshape(inputSample, (1, T, H, W, C))
 
     # We create the model
     activationModel = k.models.Model(
@@ -53,7 +53,7 @@ def plotActivations(model, dataIn, layerName):
         outputs=[model.get_layer(layerName).output]
     )
 
-    activation = activationModel.predict(dataIn)
+    activation = activationModel.predict(inputSample)
     N, T, H, W, C = activation.shape
 
     allData = []
@@ -71,7 +71,7 @@ def plotActivations(model, dataIn, layerName):
             axArr[t, c].set_title(f"time {t} channel {c}")
 
     fig.suptitle(f"layer {layerName}")
-    plt.show()
+    return fig, axArr
 
 
 def plotGrids(allData: list, plotFunc):
