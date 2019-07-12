@@ -74,21 +74,15 @@ def plotActivations(model, dataIn, layerName):
     plt.show()
 
 
-def plotGrids(allData: list, maxV=500):
+def plotGrids(allData: list, plotFunc):
     nrRows = len(allData)
     nrCols = len(allData[0])
     fig, axesArr = plt.subplots(nrRows, nrCols)
     axesArr = np.reshape(axesArr, (nrRows, nrCols))
     for r in range(nrRows):
         for c in range(nrCols):
-            plotGrid(axesArr[r, c], allData[r][c], maxV)
+            plotFunc(axesArr[r, c], allData[r][c])
     return fig, axesArr
-
-
-def plotGrid(axes, data, vmax):
-    img = axes.imshow(data)
-    img.norm.vmin = 0
-    img.norm.vmax = vmax
 
 
 def plotRadolanFrames(films, rows, cols, time):
@@ -99,7 +93,6 @@ def plotRadolanFrames(films, rows, cols, time):
             frame = film.frames[time]
             plotGrid(axesArr[r, c], frame.data, 500)
     plt.show()
-
 
 
 def createLossPlot(filePath, loss, vloss):
@@ -151,3 +144,8 @@ def movie(data: np.array, labels, interval=500):
     animation = FuncAnimation(fig, animate, frames=range(data.shape[0]), interval=interval, repeat=True, repeat_delay=1000)
 
     plt.show()
+
+
+def animate(axis, data, plotFunc, interval=15):
+    animation = FuncAnimation(fig, plotFunc, frames=data, interval=interval, repeat=True, repeat_delay=1000)
+    return animation
