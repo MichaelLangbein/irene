@@ -25,7 +25,7 @@ rawDataDir = os.getcwd() + "/rawData"
 processedDataDir = os.getcwd() + "/processedData"
 frameHeight = frameWidth = frameLength = 100
 frameOffset = 50
-
+maxWorkers=2
 
 
 class Frame:
@@ -288,6 +288,7 @@ def saveStormToFile(storm):
     print(f"saving storm to file {filename}")
     with h5.File(fileName, 'w') as fileHandle:
         groupName = storm.getId()
+        group = fileHandle.create_group(groupName)
         fromTime, toTime = storm.getTimeRange()
         group.attrs["fromTime"] = fromTime.timestamp()
         group.attrs["toTime"] = toTime.timestamp()
@@ -344,7 +345,7 @@ def analyseAndSaveTimeRange(fromTime, toTime):
         time += dt.timedelta(days=1)
     
     # execute in threads
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=maxWorkers) as executor:
         executor.map(analyseAndSaveDay, days)
 
 
