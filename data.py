@@ -228,6 +228,40 @@ def hatExtremerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     return (shortTerm or longTerm)
 
 
+def stormHasLabel(storm: Film, label: str):
+    for frame in storm.frames:
+        if frame.labels[label]:
+            return True
+    return False
+
+
+def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
+
+    Tstorm = len(storm.frames)
+    H, W = storm.frames[0].data.shape
+    outData = np.zeros((T, H, W, 1))
+
+    if T >= Tstorm:
+        offset = T - Tstorm
+        for t in range(Tstorm):
+            outData[t + offset, :, :, 0] = storm.frames[t].data
+    else:
+        offset = Tstorm - T
+        for t in range(T):
+            outData[t, :, :, 0] = storm.frames[t + offset].data
+
+    if stormHasLabel(storm, "hatExtremerSr"):
+        outLabels = [0, 0, 0, 1]
+    elif stormHasLabel(storm, "hatHeftigerSr"):
+        outLabels = [0, 0, 1, 0]
+    elif stormHasLabel(storm, "hatStarkregen"):
+        outLabels = [0, 1, 0, 0]
+    else:
+        outLabels = [1, 0, 0, 0]
+
+    return outData, outLabels
+
+
 def analyseFilm(film: Film):
     for frame in film.frames:
         time = frame.time
@@ -272,7 +306,7 @@ def analyseDay(date: dt.datetime):
     return stormsFltr
 
 
-def worthSaving(storm) -> bool:
+def worthSaving(storm: Film) -> bool:
     for frame in storm.frames:
         if frame.labels["hatStarkregen"] or frame.labels["hatHeftigerSr"] or frame.labels["hatExtremerSr"]:
             return True
@@ -283,24 +317,36 @@ def worthSaving(storm) -> bool:
     return False
 
 
-def saveStormToFile(storm):
+def saveStormToPickle(storm):
     filename = f"{processedDataDir}/{storm.getId()}.pkl"
     print(f"saving storm to file {filename}")
     with open(filename, "wb") as f:
         pickle.dump(storm, f)
 
 
-def loadStormFromFile(fileName: str) -> Film:
+def loadStormFromPickle(fileName: str) -> Film:
     with open(fileName, "rb") as f:
         storm = pickle.load(f)
     return storm
+
+
+def saveStormToNpx(X, y):
+    filename = f"{processedDataDir}/{storm.getId()}.npz"
+    print(f"saving storm to file {filename}")
+    np.savez(filename, X=X, y=y)
+
+
+def loadStormFromNpx(filename):
+    npzfile = np.load(filename)
+    return npzfile["X"], npzfile["y"]
 
 
 def analyseAndSaveDay(date):
     print(f"analysing and saving day {date}")
     storms = analyseDay(date)
     for storm in storms: 
-        saveStormToFile(storm)
+        X, y = stormToNp(storm)
+        saveStormToNpx(X, y)
 
 
 def analyseAndSaveTimeRange(fromTime, toTime):
@@ -317,38 +363,6 @@ def analyseAndSaveTimeRange(fromTime, toTime):
         executor.map(analyseAndSaveDay, days)
 
 
-def stormHasLabel(storm: Film, label: str):
-    for frame in storm.frames:
-        if frame.labels[label]:
-            return True
-    return False
-
-
-def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
-
-    Tstorm = len(storm.frames)
-    H, W = storm.frames[0].data.shape
-    outData = np.zeros((T, H, W, 1))
-
-    if T >= Tstorm:
-        offset = T - Tstorm
-        for t in range(Tstorm):
-            outData[t + offset, :, :, 0] = storm.frames[t].data
-    else:
-        offset = Tstorm - T
-        for t in range(T):
-            outData[t, :, :, 0] = storm.frames[t + offset].data
-
-    if stormHasLabel(storm, "hatExtremerSr"):
-        outLabels = [0, 0, 0, 1]
-    elif stormHasLabel(storm, "hatHeftigerSr"):
-        outLabels = [0, 0, 1, 0]
-    elif stormHasLabel(storm, "hatStarkregen"):
-        outLabels = [0, 1, 0, 0]
-    else:
-        outLabels = [1, 0, 0, 0]
-
-    return outData, outLabels
 
 
 class DataGenerator(k.utils.Sequence):
@@ -371,8 +385,7 @@ class DataGenerator(k.utils.Sequence):
         labels = np.zeros((self.batchSize, 4))
 
         for bNr, fileName in enumerate(fileNames): 
-            storm = loadStormFromFile(fileName)
-            x, y = stormToNp(storm, self.timeseriesLength)
+            x, y = loadStormFromNpx(fileName)
             dataPoints[bNr, :, :, :, :] = x
             labels[bNr, :] = y
         
@@ -394,10 +407,13 @@ class DataGenerator(k.utils.Sequence):
 
 
 if __name__ == '__main__':
-    fromTime = dt.date(2016, 7, 1)
-    toTime = dt.date(2016, 7, 2)
+    fromTime = dt.datetime(2016, 6, 1)
+    toTime = dt.datetime(2016, 6, 3)
     analyseAndSaveTimeRange(fromTime, toTime)
-    fromTime = dt.date(2016, 6, 1)
-    toTime = dt.date(2016, 6, 1)
-    analyseAndSaveTimeRange(fromTime, toTime)
-
+    batchSize = 4
+    timeSteps = 10
+    training_generator = DataGenerator(processedDataDir, fromTime, toTime, batchSize, timeSteps)
+    for x,y in training_generator:
+        print(x)
+        print(y)
+        break
