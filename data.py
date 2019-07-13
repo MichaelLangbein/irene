@@ -7,6 +7,7 @@ import datetime as dt
 import wradlib as wrl
 import matplotlib.pyplot as plt
 import h5py as h5
+import pickle
 import concurrent.futures
 import tensorflow.keras as k
 import plotting as p
@@ -85,17 +86,16 @@ class Film:
     def getId(self):
         fromTime, toTime = self.getTimeRange()
         tlIndx = self.frames[0].tlIndx
-        return f"storm_{tlIndx}_{fromTime}_{toTime}"
+        return f"storm_{int(fromTime.timestamp())}_{int(toTime.timestamp())}_{tlIndx[0]}_{tlIndx[1]}"
 
     @staticmethod
     def parseId(filename: str):
-        stormname = filename.strip(".h5")
-        parts = stormname.split("_")
-        if len(parts) < 3 or parts[0] != "storm":
+        parts = filename.split("_")
+        if len(parts) < 4 or parts[0] != "storm":
              return None, None, None
-        tlIndx = parts[1]
-        fromTime = dt.datetime.strptime(parts[2], "%Y-%m-%d %H:%M:%S")
-        toTime = dt.datetime.strptime(parts[3], "%Y-%m-%d %H:%M:%S")
+        fromTime = dt.datetime.fromtimestamp(int(parts[1]))
+        toTime = dt.datetime.fromtimestamp(int(parts[2]))
+        tlIndx = (parts[3], parts[4])
         return tlIndx, fromTime, toTime
 
 
@@ -178,7 +178,7 @@ def hatStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (25.0 >= np.max(lastHourSum) >= 15.0)
     longTerm = (35.0 >= np.max(sixHourSum) >= 20.0)
     if (shortTerm or longTerm):
-        print(f"{lastHour[-1].getId()} hat starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
+        print(f"{lastHour[-1].getId()} hat starkregen bei bei {int(lastHourSum.max())} mm/1h  und  {int(sixHourSum.max())} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -201,7 +201,7 @@ def hatHeftigerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (40.0 >= np.max(lastHourSum) > 25.0)
     longTerm = (60.0 >= np.max(sixHourSum) > 35.0)
     if (shortTerm or longTerm):
-        print(f"{lastHour[-1].getId()} hat heftigen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
+        print(f"{lastHour[-1].getId()} hat heftigen starkregen bei {int(lastHourSum.max())} mm/1h  und  {int(sixHourSum.max())} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -224,7 +224,7 @@ def hatExtremerStarkregen(series: List[Frame], time: dt.datetime) -> bool:
     shortTerm = (np.max(lastHourSum) >= 40.0)
     longTerm = (np.max(sixHourSum) >= 60.0)
     if (shortTerm or longTerm):
-        print(f"{lastHour[-1].getId()} hat extremen starkregen bei {lastHourSum.max()} mm/1h  und  {sixHourSum.max()} mm/6h")
+        print(f"{lastHour[-1].getId()} hat extremen starkregen bei {int(lastHourSum.max())} mm/1h  und  {int(sixHourSum.max())} mm/6h")
     return (shortTerm or longTerm)
 
 
@@ -284,48 +284,16 @@ def worthSaving(storm) -> bool:
 
 
 def saveStormToFile(storm):
-    filename = f"{processedDataDir}/{storm.getId()}.h5"
+    filename = f"{processedDataDir}/{storm.getId()}.pkl"
     print(f"saving storm to file {filename}")
-    with h5.File(fileName, 'w') as fileHandle:
-        groupName = storm.getId()
-        group = fileHandle.create_group(groupName)
-        fromTime, toTime = storm.getTimeRange()
-        group.attrs["fromTime"] = fromTime.timestamp()
-        group.attrs["toTime"] = toTime.timestamp()
-        group.attrs["tlIndx"] = storm.frames[0].tlIndx
-        for key in storm.frames[0].attrs:
-            group.attrs[f"attrs_{key}"] = str(storm.frames[0].attrs[key])
-        for frame in storm.frames:
-            dsetName = frame.getId()
-            dset = fileHandle.create_dataset(f"{groupName}/{dsetName}", data=frame.data)
-            dset.attrs["time"] = frame.time.timestamp()
-            dset.attrs["hatStarkregen"] = frame.labels["hatStarkregen"]
-            dset.attrs["hatHeftigerSr"] = frame.labels["hatHeftigerSr"]
-            dset.attrs["hatExtremerSr"] = frame.labels["hatExtremerSr"]
+    with open(filename, "wb") as f:
+        pickle.dump(storm, f)
 
 
 def loadStormFromFile(fileName: str) -> Film:
-    with h5.File(fileName, 'r') as f:
-        for groupName in f.keys():
-            group = f[groupName]
-            fromTime = dt.datetime.fromtimestamp(group.attrs["fromTime"])
-            tlIndx = tuple(group.attrs["tlIndx"])
-            frames = []
-            for dsetName in group.keys():
-                dset = group[dsetName]
-                time = dt.datetime.fromtimestamp(dset.attrs["time"])
-                data = np.array(dset)
-                labels = {
-                    "hatStarkregen": dset.attrs["hatStarkregen"],
-                    "hatHeftigerSr": dset.attrs["hatHeftigerSr"],
-                    "hatExtremerSr": dset.attrs["hatExtremerSr"]
-                }
-                frame = Frame(data, {'datetime': time}, tlIndx)
-                frame.labels = labels
-                frames.append(frame)
-                storm = Film(frames)
+    with open(fileName, "rb") as f:
+        storm = pickle.load(f)
     return storm
-
 
 
 def analyseAndSaveDay(date):
@@ -384,7 +352,7 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
 
 
 class DataGenerator(k.utils.Sequence):
-    def __init__(self, dataDir, startDate, endDate, batchSize, timeseriesLength):
+    def __init__(self, dataDir, startDate: dt.datetime, endDate: dt.datetime, batchSize, timeseriesLength):
         self.dataDir = dataDir
         self.startDate = startDate
         self.endDate = endDate
@@ -414,7 +382,7 @@ class DataGenerator(k.utils.Sequence):
         filteredNames = []
         fileNames = [f for f in listdir(processedDataDir) if isfile(join(processedDataDir, f))]
         for fileName in fileNames: 
-            tlIndx, fromTime, toTime = Film.parseId(fileName)
+            tlIndx, fromTime, toTime = Film.parseId(fileName.strip(".pkl"))
             if tlIndx and fromTime and toTime:
                 if startDate < fromTime < endDate and startDate < toTime < endDate:
                     filteredNames.append(processedDataDir + "/" + fileName)
@@ -427,9 +395,9 @@ class DataGenerator(k.utils.Sequence):
 
 if __name__ == '__main__':
     fromTime = dt.date(2016, 7, 1)
-    toTime = dt.date(2016, 7, 30)
+    toTime = dt.date(2016, 7, 2)
     analyseAndSaveTimeRange(fromTime, toTime)
     fromTime = dt.date(2016, 6, 1)
-    toTime = dt.date(2016, 6, 14)
+    toTime = dt.date(2016, 6, 1)
     analyseAndSaveTimeRange(fromTime, toTime)
 

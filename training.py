@@ -19,8 +19,8 @@ imageHeight = imageSize
 channels = 1
 
 
-training_generator = rd.DataGenerator(processedDataDir, dt.date(2016, 6, 1), dt.date(2016, 6, 30), batchSize, timeSteps)
-validation_generator = rd.DataGenerator(processedDataDir, dt.date(2016, 7, 1), dt.date(2016, 7, 10), batchSize, timeSteps)
+training_generator = rd.DataGenerator(processedDataDir, dt.datetime(2016, 6, 1), dt.datetime(2016, 6, 30), batchSize, timeSteps)
+validation_generator = rd.DataGenerator(processedDataDir, dt.datetime(2016, 7, 1), dt.datetime(2016, 7, 10), batchSize, timeSteps)
 
 
 model = k.models.Sequential([
