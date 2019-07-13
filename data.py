@@ -373,7 +373,7 @@ class DataGenerator(k.utils.Sequence):
         for bNr, fileName in enumerate(fileNames): 
             storm = loadStormFromFile(fileName)
             x, y = stormToNp(storm, self.timeseriesLength)
-            dataPoints[bNr, :, :, :, 0] = x
+            dataPoints[bNr, :, :, :, :] = x
             labels[bNr, :] = y
         
         return dataPoints, labels
