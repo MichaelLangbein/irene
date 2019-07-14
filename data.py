@@ -419,9 +419,9 @@ class DataGenerator(k.utils.Sequence):
 
 
 if __name__ == '__main__':
-    fromTime = dt.datetime(2016, 6, 1)
-    toTime = dt.datetime(2016, 7, 15)
-    analyseAndSaveTimeRange(fromTime, toTime, 1)
+    fromTime = dt.datetime(2016, 6, 16)
+    toTime = dt.datetime(2016, 7, 10)
+    # analyseAndSaveTimeRange(fromTime, toTime, 1)
     batchSize = 4
     timeSteps = 10
     training_generator = DataGenerator(processedDataDir, fromTime, toTime, batchSize, timeSteps)

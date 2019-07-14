@@ -4,6 +4,7 @@ import tensorflow.keras.backend as K
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import wradlib as wrl
+from typing import Callable
 
 """
     understanding matplotlib
@@ -17,6 +18,70 @@ import wradlib as wrl
             plt.show()
 
 """
+
+
+
+def showActivation(model, inputSample, layerName, channel):
+
+    # We turn the one input into a batch of size one
+    T, H, W, C = inputSample.shape
+    inputBatch = np.reshape(inputSample, (1, T, H, W, C))
+
+    # We create the model
+    activationModel = k.models.Model(
+        inputs=[model.input], 
+        outputs=[model.get_layer(layerName).output]
+    )
+
+    activation = activationModel.predict(inputBatch)
+    N, T, H, W, C = activation.shape
+    sampleActivation = activation[0]
+
+    fig, axes = plt.subplots(2)
+    
+    img1 = plt.imshow(inputSample[0, :, :, 0])
+    img1.norm.vmin = np.min(inputSample)
+    img1.norm.vmax = np.max(inputSample)
+
+    def animate1(frameNr):
+        img1.set_data(inputSample[frameNr, :, :, 0])
+        return img1
+    
+    animation1 = FuncAnimation(fig, animate1, frames=range(T), interval=15, repeat=True, repeat_delay=1000)
+
+    img2 = plt.imshow(sampleActivation[0, :, :, channel])
+    img2.norm.vmin = np.min(sampleActivation)
+    img2.norm.vmax = np.max(sampleActivation)
+
+    def animate2(frameNr):
+        img2.set_data(sampleActivation[frameNr, :, :, channel])
+        return img2
+    
+    animation2 = FuncAnimation(fig, animate2, frames=range(T), interval=15, repeat=True, repeat_delay=1000)
+
+    plt.show()
+
+
+def showActivations(model, inputSample: np.array, layerName):
+    # We turn the one input into a batch of size one
+    T, H, W, C = inputSample.shape
+    inputSample = np.reshape(inputSample, (1, T, H, W, C))
+
+    # We create the model
+    activationModel = k.models.Model(
+        inputs=[model.input], 
+        outputs=[model.get_layer(layerName).output]
+    )
+
+    activation = activationModel.predict(inputSample)
+    N, T, H, W, C = activation.shape
+
+    figure, axArr = plt.subplots(C)
+    for c in range(C):
+        movie(figure, axArr[c], activation[0, :, :, :, c], [f"activation for layer {layerName}, channel {c}"])
+
+    plt.show()
+
 
 
 
@@ -41,47 +106,16 @@ def getMaximallyActivatingImage(model, layerName: str, channelNr: int, imageDime
     return image[0]
 
 
-def plotActivations(model, inputSample, layerName):
-
-    # We turn the one input into a batch of size one
-    T, H, W, C = inputSample.shape
-    inputSample = np.reshape(inputSample, (1, T, H, W, C))
-
-    # We create the model
-    activationModel = k.models.Model(
-        inputs=[model.input], 
-        outputs=[model.get_layer(layerName).output]
-    )
-
-    activation = activationModel.predict(inputSample)
-    N, T, H, W, C = activation.shape
-
-    allData = []
-    for t in range(T):
-        row = []
-        for c in range(C):
-            data = activation[0, t, :, :, c]
-            row.append(data)
-        allData.append(row)
-
-    fig, axArr = plotGrids(allData, np.max(activation))
-
-    for t in range(T):
-        for c in range(C): 
-            axArr[t, c].set_title(f"time {t} channel {c}")
-
-    fig.suptitle(f"layer {layerName}")
-    return fig, axArr
 
 
-def plotGrids(allData: list, plotFunc):
+def plotGrids(allData: list, plotFunc: Callable):
     nrRows = len(allData)
     nrCols = len(allData[0])
     fig, axesArr = plt.subplots(nrRows, nrCols)
     axesArr = np.reshape(axesArr, (nrRows, nrCols))
     for r in range(nrRows):
         for c in range(nrCols):
-            plotFunc(axesArr[r, c], allData[r][c])
+            plotFunc(fig, axesArr[r, c], allData[r][c])
     return fig, axesArr
 
 
@@ -123,17 +157,13 @@ def plotRadolanData(axes, data, attrs, clabel=None):
     plt.show()
 
 
-def movie(data: np.array, labels, interval=500):
-
-    fig = plt.figure()
-
+def movie(fig, axes, data: np.array, labels=[], interval=500):
     img = plt.imshow(data[0])
     img.norm.vmin = np.min(data)
     img.norm.vmax = np.max(data)
-    axes = fig.get_axes()
 
     labelsString = ", ".join([str(label) for label in labels])
-    axes[0].set_title(labelsString)
+    axes.set_title(labelsString)
 
     def animate(frameNr):
         frame = data[frameNr]
@@ -142,10 +172,10 @@ def movie(data: np.array, labels, interval=500):
         return img, labelsString
 
     animation = FuncAnimation(fig, animate, frames=range(data.shape[0]), interval=interval, repeat=True, repeat_delay=1000)
-
-    plt.show()
-
-
-def animate(axis, data, plotFunc, interval=15):
-    animation = FuncAnimation(fig, plotFunc, frames=data, interval=interval, repeat=True, repeat_delay=1000)
     return animation
+
+
+def showMovie(data: np.array, labels, interval=500):
+    figure, axes = plt.subplots(1)
+    animation = movie(figure, axes, data, labels, interval)
+    plt.show()

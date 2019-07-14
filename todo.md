@@ -1,7 +1,7 @@
 try with a pretrained network
 try without pooling after every conv
 try some more data augmentation
-
+vizualize where the parameter-position (or the gradient) is moving. is it jumping around or finding its minimum in a direct line?
 
 
 

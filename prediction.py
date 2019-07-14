@@ -1,38 +1,53 @@
 import os
 import tensorflow.keras as k
 import datetime as dt
-import radarData2 as rd
+import data as rd
+from data import rawDataDir, processedDataDir, frameHeight, frameWidth, frameLength, Film, Frame, analyseAndSaveTimeRange
 import numpy as np
 import plotting as pl
 import matplotlib.pyplot as plt
 
 
+print("----starting up-----")
 thisDir = os.path.abspath('')
 tfDataDir = thisDir + "/tfData/"
 modelName = "latestRadPredModel.h5"
+batchSize = 4
+stepsPerEpoch = int(2000 / batchSize)
+validationSteps = int(200 / batchSize)
+nrValidationSamples = 50
+timeSteps = int(5 * 60 / 5)
+imageSize = 100
+imageWidth = imageSize
+imageHeight = imageSize
+channels = 1
+
 
 
 model = k.models.load_model(tfDataDir + modelName)
-print(model.summary())
-dataIn, dataOut = rd.loadTfData("validation_2016.h5", int(5 * 60/5), 10)
-prediction = model.predict(dataIn)
+generator = rd.DataGenerator(processedDataDir, dt.datetime(2016, 6, 1), dt.datetime(2016, 6, 3), batchSize, timeSteps)
+
+# maxActInpt = pl.getMaximallyActivatingImage(model, "conv4", 0, dataIn[0].shape)
+# pl.showMovie(maxActInpt[:, :, :, 0], ["maximal activationImage for conv4 channel 0 "], 100)
 
 
-maxActInpt = pl.getMaximallyActivatingImage(model, "conv2", 0, dataIn[0].shape)
-pl.movie(maxActInpt[:, :, :, 0], ["maximal activationImage for conv2 channel 0 "], 100)
-
-maxActInpt = pl.getMaximallyActivatingImage(model, "conv3", 0, dataIn[0].shape)
-pl.movie(maxActInpt[:, :, :, 0], ["maximal activationImage for conv3 channel 0 "], 100)
-
-fig, axArr = pl.plotActivations(model, dataIn[6], "conv3")
-axArr = np.reshape(axArr, (4, 4))
-plt.show()
+def getMaxIndex(list):
+    return np.where(list == np.amax(list))
 
 
-
-for r, row in enumerate(prediction):
-    print("----{}----".format(r))
-    print("Pred: {}".format(row))
-    print("Act:  {}".format(dataOut[r]))
-    if np.random.rand() > 0.95:
-        pl.movie(dataIn[r, :, :, :, 0], dataOut[r], 15)
+print("----predicting----")
+i = 0
+for dataIn, dataOut in generator: 
+    predictions = model.predict(dataIn)
+    for r in range(len(predictions)):
+        target = dataOut[r]
+        maxIndexTarget = getMaxIndex(target)
+        prediction = predictions[r]
+        maxIndexPrediction = getMaxIndex(prediction)
+        print(f"target: {target}")
+        print(f"prediction: {prediction}")
+        print(f"correctly predicted {maxIndexPrediction == maxIndexTarget}")
+        pl.showActivation(model, dataIn[r], "conv3", 2)
+    i += 1
+    if i > 1:
+        break
