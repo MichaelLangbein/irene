@@ -26,7 +26,6 @@ rawDataDir = os.getcwd() + "/rawData"
 processedDataDir = os.getcwd() + "/processedData"
 frameHeight = frameWidth = frameLength = 100
 frameOffset = 50
-maxWorkers=2
 
 
 class Frame:
@@ -235,20 +234,12 @@ def stormHasLabel(storm: Film, label: str):
     return False
 
 
-def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
+def stormToNp(storm: Film) -> Tuple[np.array, np.array]:
 
-    Tstorm = len(storm.frames)
-    H, W = storm.frames[0].data.shape
+    stormData = storm.getNpData()
+    T, H, W = stormData.shape
     outData = np.zeros((T, H, W, 1))
-
-    if T >= Tstorm:
-        offset = T - Tstorm
-        for t in range(Tstorm):
-            outData[t + offset, :, :, 0] = storm.frames[t].data
-    else:
-        offset = Tstorm - T
-        for t in range(T):
-            outData[t, :, :, 0] = storm.frames[t + offset].data
+    outData[:, :, :, 0] = stormData
 
     if stormHasLabel(storm, "hatExtremerSr"):
         outLabels = [0, 0, 0, 1]
@@ -260,6 +251,22 @@ def stormToNp(storm: Film, T: int) -> Tuple[np.array, np.array]:
         outLabels = [1, 0, 0, 0]
 
     return outData, outLabels
+
+
+def padArrayTo(stormData, targetT):
+    
+    T, H, W, C = stormData.shape
+    outData = np.zeros((targetT, H, W, C))
+
+    if targetT > T:
+        offset = targetT - T
+        outData[offset:, :, :, :] = stormData
+    else:
+        offset = T - targetT
+        outData = stormData[offset:, :, :, :]
+
+    return outData
+
 
 
 def analyseFilm(film: Film):
@@ -330,8 +337,7 @@ def loadStormFromPickle(fileName: str) -> Film:
     return storm
 
 
-def saveStormToNpx(X, y):
-    filename = f"{processedDataDir}/{storm.getId()}.npz"
+def saveStormToNpx(X, y, filename):
     print(f"saving storm to file {filename}")
     np.savez(filename, X=X, y=y)
 
@@ -346,10 +352,11 @@ def analyseAndSaveDay(date):
     storms = analyseDay(date)
     for storm in storms: 
         X, y = stormToNp(storm)
-        saveStormToNpx(X, y)
+        filename = f"{processedDataDir}/{storm.getId()}.npz"
+        saveStormToNpx(X, y, filename)
 
 
-def analyseAndSaveTimeRange(fromTime, toTime):
+def analyseAndSaveTimeRange(fromTime, toTime, maxWorkers):
     
     # get days to work with
     days = []
@@ -359,8 +366,12 @@ def analyseAndSaveTimeRange(fromTime, toTime):
         time += dt.timedelta(days=1)
     
     # execute in threads
-    with concurrent.futures.ThreadPoolExecutor(max_workers=maxWorkers) as executor:
-        executor.map(analyseAndSaveDay, days)
+    if maxWorkers > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=maxWorkers) as executor:
+            executor.map(analyseAndSaveDay, days)
+    else: 
+        for day in days: 
+            analyseAndSaveDay(day)
 
 
 
@@ -386,6 +397,7 @@ class DataGenerator(k.utils.Sequence):
 
         for bNr, fileName in enumerate(fileNames): 
             x, y = loadStormFromNpx(fileName)
+            x = padArrayTo(x, self.timeseriesLength)
             dataPoints[bNr, :, :, :, :] = x
             labels[bNr, :] = y
         
@@ -408,8 +420,8 @@ class DataGenerator(k.utils.Sequence):
 
 if __name__ == '__main__':
     fromTime = dt.datetime(2016, 6, 1)
-    toTime = dt.datetime(2016, 6, 3)
-    analyseAndSaveTimeRange(fromTime, toTime)
+    toTime = dt.datetime(2016, 7, 15)
+    analyseAndSaveTimeRange(fromTime, toTime, 1)
     batchSize = 4
     timeSteps = 10
     training_generator = DataGenerator(processedDataDir, fromTime, toTime, batchSize, timeSteps)

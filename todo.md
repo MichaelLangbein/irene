@@ -1,3 +1,11 @@
+try with a pretrained network
+try without pooling after every conv
+try some more data augmentation
+
+
+
+
+
 try to predict with simple two layer fully connected. 
 try with a lot more imput data
 
@@ -14,9 +22,6 @@ storms labeled by globally worst
 storms split by sliding window, labeled by last
 
 
-
-modelData is stored in h5 in order. 
-Need to shuffle that through  - otherwise I only train model on early mornings storms, not on evenings storms
 
 
 peak of a storm might be somewhere in middle. 

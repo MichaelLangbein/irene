@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow.keras as k
 import data as rd
-from data import rawDataDir, processedDataDir, frameHeight, frameWidth, frameLength, Film, Frame
+from data import rawDataDir, processedDataDir, frameHeight, frameWidth, frameLength, Film, Frame, analyseAndSaveTimeRange
 import datetime as dt
 import time
 import plotting as p
@@ -19,8 +19,17 @@ imageHeight = imageSize
 channels = 1
 
 
-training_generator = rd.DataGenerator(processedDataDir, dt.datetime(2016, 6, 1), dt.datetime(2016, 6, 30), batchSize, timeSteps)
-validation_generator = rd.DataGenerator(processedDataDir, dt.datetime(2016, 7, 1), dt.datetime(2016, 7, 10), batchSize, timeSteps)
+# creating trainingdata
+trainingStart = dt.datetime(2016, 6, 1)
+trainingEnd = dt.datetime(2016, 6, 15)
+# analyseAndSaveTimeRange(trainingStart, trainingEnd, 1)
+validationStart = dt.datetime(2016, 7, 1)
+validationEnd = dt.datetime(2016, 7, 5)
+# analyseAndSaveTimeRange(validationStart, validationEnd, 1)
+
+# getting generators
+training_generator = rd.DataGenerator(processedDataDir, trainingStart, trainingEnd, batchSize, timeSteps)
+validation_generator = rd.DataGenerator(processedDataDir, validationStart, validationEnd, batchSize, timeSteps)
 
 
 model = k.models.Sequential([
