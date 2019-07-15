@@ -1,16 +1,17 @@
 import numpy as np
 import tensorflow.keras as k
-import data as rd
-from data import rawDataDir, processedDataDir, frameHeight, frameWidth, frameLength, Film, Frame, analyseAndSaveTimeRange
+from data import Film, Frame, analyseAndSaveTimeRange, DataGenerator
+from config import rawDataDir, processedDataDir, tfDataDir
 import datetime as dt
 import time
 import plotting as p
 import os
 
 
-batchSize = 4
-stepsPerEpoch = int(2000 / batchSize)
-validationSteps = int(200 / batchSize)
+batchSize = 10
+nrBatchesPerEpoch = 100
+nrEpochs = 20
+validationSteps = 10
 nrValidationSamples = 50
 timeSteps = int(5 * 60 / 5)
 imageSize = 100
@@ -21,15 +22,13 @@ channels = 1
 
 # creating trainingdata
 trainingStart = dt.datetime(2016, 6, 1)
-trainingEnd = dt.datetime(2016, 6, 15)
-# analyseAndSaveTimeRange(trainingStart, trainingEnd, 1)
+trainingEnd = dt.datetime(2016, 6, 30)
 validationStart = dt.datetime(2016, 7, 1)
-validationEnd = dt.datetime(2016, 7, 5)
-# analyseAndSaveTimeRange(validationStart, validationEnd, 1)
+validationEnd = dt.datetime(2016, 7, 15)
 
 # getting generators
-training_generator = rd.DataGenerator(processedDataDir, trainingStart, trainingEnd, batchSize, timeSteps)
-validation_generator = rd.DataGenerator(processedDataDir, validationStart, validationEnd, batchSize, timeSteps)
+training_generator = DataGenerator(processedDataDir, trainingStart, trainingEnd, nrBatchesPerEpoch, batchSize, timeSteps)
+validation_generator = DataGenerator(processedDataDir, validationStart, validationEnd, nrBatchesPerEpoch, batchSize, timeSteps)
 
 
 model = k.models.Sequential([
@@ -58,7 +57,8 @@ model = k.models.Sequential([
 
 model.compile(
     optimizer=k.optimizers.Adam(),
-    loss=k.losses.categorical_crossentropy
+    loss=k.losses.categorical_crossentropy, 
+    metrics=[k.metrics.categorical_accuracy]
 )
 
 print(model.summary())
@@ -87,24 +87,29 @@ tensorBoard = k.callbacks.TensorBoard(
 class CustomPlotCallback(k.callbacks.Callback):
     losses = []
     vlosses = []
+    accs = []
+    vaccs = []
 
     def on_epoch_end(self, epoch, logs={}):
         self.losses.append(logs["loss"])
         self.vlosses.append(logs["val_loss"])
         p.createLossPlot(tfDataDir + "/" + "loss.png", self.losses, self.vlosses)
+        self.accs.append(logs["categorical_accuracy"])
+        self.vaccs.append(logs["val_categorical_accuracy"])
+        p.createLossPlot(tfDataDir + "/" + "acc.png", self.accs, self.vaccs)
 
 
 customPlotCallback = CustomPlotCallback()
 
 
 history = model.fit_generator(
-    training_generator, 
-    steps_per_epoch=stepsPerEpoch, 
-    epochs=8, 
-    verbose=2, 
-    callbacks=[modelSaver, tensorBoard, customPlotCallback], 
-    validation_data=validation_generator, 
-    validation_steps=validationSteps
+    training_generator,
+    epochs=nrEpochs,
+    verbose=2,
+    callbacks=[modelSaver, tensorBoard, customPlotCallback],
+    validation_data=validation_generator,
+    use_multiprocessing=True,
+    workers=4, 
 )
 
 
@@ -115,3 +120,4 @@ if not os.path.exists(resultDir):
 model.save("{}/simpleRadPredModel.h5".format(resultDir))
 model.save("{}/latestRadPredModel.h5".format(tfDataDir))
 p.createLossPlot("{}/loss.png".format(resultDir), history.history['loss'], history.history['val_loss'])
+p.createLossPlot("{}/accuracy.png".format(resultDir), history.history['categorical_accuracy'], history.history['val_categorical_accuracy'])

@@ -135,7 +135,7 @@ def createLossPlot(filePath, loss, vloss):
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper right')
+    plt.legend(['training', 'validation'], loc='upper right')
     plt.savefig(filePath)
 
 

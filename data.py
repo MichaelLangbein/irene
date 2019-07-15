@@ -12,18 +12,17 @@ import concurrent.futures
 import tensorflow.keras as k
 import plotting as p
 from typing import List, Tuple, Union, Optional
+from config import rawDataDir, processedDataDir
 
 
 """
-    downloaded from ftp://opendata.dwd.de/climate_environment/CDC/grids_germany/5_minutes/ 
+    downloaded from ftp://opendata.dwd.de/climate_environment/CDC/grids_germany/5_minutes/
     read with https://docs.wradlib.org/en/stable/notebooks/radolan/radolan_format.html
     units: https://www.dwd.de/DE/leistungen/radolan/produktuebersicht/radolan_produktuebersicht_pdf.pdf?__blob=publicationFile&v=6
     format: https://www.dwd.de/DE/leistungen/radarklimatologie/radklim_kompositformat_1_0.pdf?__blob=publicationFile&v=1
 """
 
 
-rawDataDir = os.getcwd() + "/rawData"
-processedDataDir = os.getcwd() + "/processedData"
 frameHeight = frameWidth = frameLength = 100
 frameOffset = 50
 
@@ -91,7 +90,7 @@ class Film:
     def parseId(filename: str):
         parts = filename.split("_")
         if len(parts) < 4 or parts[0] != "storm":
-             return None, None, None
+            return None, None, None
         fromTime = dt.datetime.fromtimestamp(int(parts[1]))
         toTime = dt.datetime.fromtimestamp(int(parts[2]))
         tlIndx = (parts[3], parts[4])
@@ -350,68 +349,83 @@ def loadStormFromNpx(filename):
 def analyseAndSaveDay(date):
     print(f"analysing and saving day {date}")
     storms = analyseDay(date)
-    for storm in storms: 
+    for storm in storms:
         X, y = stormToNp(storm)
         filename = f"{processedDataDir}/{storm.getId()}.npz"
         saveStormToNpx(X, y, filename)
 
 
 def analyseAndSaveTimeRange(fromTime, toTime, maxWorkers):
-    
+
     # get days to work with
     days = []
     time = fromTime
     while time < toTime:
         days.append(time)
         time += dt.timedelta(days=1)
-    
+
     # execute in threads
     if maxWorkers > 1:
         with concurrent.futures.ThreadPoolExecutor(max_workers=maxWorkers) as executor:
             executor.map(analyseAndSaveDay, days)
-    else: 
-        for day in days: 
+    else:
+        for day in days:
             analyseAndSaveDay(day)
 
 
 
 
 class DataGenerator(k.utils.Sequence):
-    def __init__(self, dataDir, startDate: dt.datetime, endDate: dt.datetime, batchSize, timeseriesLength):
+    def __init__(self, dataDir, startDate: dt.datetime, endDate: dt.datetime, nrBatchesPerEpoch, batchSize, timeseriesLength, verbose=True):
         self.dataDir = dataDir
         self.startDate = startDate
         self.endDate = endDate
+        self.nrBatchesPerEpoch = nrBatchesPerEpoch
         self.batchSize = batchSize
         self.timeseriesLength = timeseriesLength
         self.fileNames = self.getFileNames(dataDir, startDate, endDate)
         self.shuffleFileOrder()
+        self.verbose = verbose
+
 
     def __len__(self):
-        return int(np.floor(len(self.fileNames) / self.batchSize))
+        actualMaxNrBatches = int(np.floor(len(self.fileNames) / self.batchSize))
+        givenMaxNrBatches = self.nrBatchesPerEpoch
+        return min(actualMaxNrBatches, givenMaxNrBatches)
+
 
     def __getitem__(self, batchNr):
         fileNames = self.fileNames[batchNr * self.batchSize : (batchNr + 1) * self.batchSize]
+        if(self.verbose):
+            print(f"generator: batchNr {batchNr}, getting files: {fileNames}")
 
         dataPoints = np.zeros((self.batchSize, self.timeseriesLength, frameWidth, frameHeight, 1))
         labels = np.zeros((self.batchSize, 4))
 
-        for bNr, fileName in enumerate(fileNames): 
+        for bNr, fileName in enumerate(fileNames):
             x, y = loadStormFromNpx(fileName)
             x = padArrayTo(x, self.timeseriesLength)
             dataPoints[bNr, :, :, :, :] = x
             labels[bNr, :] = y
-        
+
         return dataPoints, labels
+
+
+    def on_epoch_end(self):
+        print("shuffling ....")
+        self.shuffleFileOrder()
+
 
     def getFileNames(self, dataDir, startDate, endDate):
         filteredNames = []
         fileNames = [f for f in listdir(processedDataDir) if isfile(join(processedDataDir, f))]
-        for fileName in fileNames: 
+        for fileName in fileNames:
             tlIndx, fromTime, toTime = Film.parseId(fileName.strip(".pkl"))
             if tlIndx and fromTime and toTime:
                 if startDate < fromTime < endDate and startDate < toTime < endDate:
                     filteredNames.append(processedDataDir + "/" + fileName)
         return filteredNames
+
 
     def shuffleFileOrder(self):
         rdm.shuffle(self.fileNames)
@@ -419,13 +433,13 @@ class DataGenerator(k.utils.Sequence):
 
 
 if __name__ == '__main__':
-    fromTime = dt.datetime(2016, 6, 16)
+    fromTime = dt.datetime(2016, 6, 1)
     toTime = dt.datetime(2016, 7, 10)
-    # analyseAndSaveTimeRange(fromTime, toTime, 1)
+    analyseAndSaveTimeRange(fromTime, toTime, 1)
     batchSize = 4
     timeSteps = 10
-    training_generator = DataGenerator(processedDataDir, fromTime, toTime, batchSize, timeSteps)
-    for x,y in training_generator:
+    training_generator = DataGenerator(processedDataDir, fromTime, toTime, 4, batchSize, timeSteps)
+    for x, y in training_generator:
         print(x)
         print(y)
         break
